@@ -172,10 +172,10 @@ Kunde, Zeitraum und Erstellungsdatum, die Termine nach Datum mit dem
 vollständigen Termintext, eine Zwischensumme pro Monat oder Quartal und die
 Gesamtsumme. Kommen die Termine aus mehreren Kalendern, zeigt eine Spalte
 „Kalender“, aus welchem. Es ist für A4 quer eingerichtet, die Kopfzeile wiederholt sich
-auf jeder Seite. Danach folgt pro Kalender ein internes Blatt mit Autofilter
-und einer Summe, die sich nach dem Filter richtet. Vor dem Versand die
-internen Blätter löschen oder nur das Blatt „Bericht“ als PDF speichern. Die
-Mappe ist nicht gespeichert. Scheitert Excel, nennt die Meldung den Schritt
+auf jeder Seite. Danach folgt pro Kalender ein Blatt im selben Aufbau, nur
+mit den Terminen dieses Kalenders und seinem Namen im Kopf. Vor dem Versand
+die Blätter löschen, die der Kunde nicht sehen soll, oder nur die passenden
+Blätter als PDF speichern. Die Mappe ist nicht gespeichert. Scheitert Excel, nennt die Meldung den Schritt
 und die Fehlernummer, danach öffnet sich die CSV-Datei.
 
 Die CSV-Datei hat eine Spalte „Kalender“.

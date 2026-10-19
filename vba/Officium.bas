@@ -279,7 +279,7 @@ End Function
 ' Fills a new workbook in the given Excel and shows it. Sheet "Bericht" is
 ' meant for the customer: appointments by date with their full text, a total
 ' per group and overall, ready to print on A4. One sheet per calendar follows
-' for internal checks. On an error Excel is closed again and False returned.
+' in the same layout. On an error Excel is closed again and False returned.
 Private Function ShowInExcel(ByVal xl As Object, ByVal customer As String, ByVal fromDate As Date, _
                              ByVal untilDate As Date, ByVal report As Variant) As Boolean
     On Error GoTo Failed
@@ -290,13 +290,14 @@ Private Function ShowInExcel(ByVal xl As Object, ByVal customer As String, ByVal
     Set book = xl.Workbooks.Add(-4167)  ' xlWBATWorksheet: a single sheet
     Set sheet = book.Worksheets(1)
     sheet.Name = SheetName("Bericht", takenNames)
-    FillCustomerSheet sheet, customer, fromDate, untilDate, report, calendarCount > 1
+    FillCustomerSheet sheet, customer, fromDate, untilDate, report, calendarCount > 1, ""
 
     For i = 1 To calendarCount
         SetExcelStep "Blatt " & names(i)
         Set sheet = book.Worksheets.Add(After:=book.Worksheets(book.Worksheets.Count))
         sheet.Name = SheetName(names(i), takenNames)
-        FillAppointmentSheet sheet, RowsWhere(report, COL_CALENDAR, names(i))
+        FillCustomerSheet sheet, customer, fromDate, untilDate, RowsWhere(report, COL_CALENDAR, names(i)), _
+            False, names(i)
     Next
 
     SetExcelStep "Mappe anzeigen"
@@ -356,12 +357,14 @@ Private Sub CloseProgress()
     progressWindow = 0
 End Sub
 
-' The sheet for the customer: title block in rows 1 to 4, the table from
+' A sheet for the customer: title block in rows 1 to 4, the table from
 ' row 6. Per group a heading row and a subtotal, at the end the total.
-' The column "Kalender" says whose calendar an appointment comes from; it is
-' removed when all appointments come from one calendar. Errors go to the caller.
+' The column "Kalender" says whose calendar an appointment comes from; without
+' showCalendar it is removed. A calendarName goes into the title block, for the
+' sheet of one calendar. Errors go to the caller.
 Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, ByVal fromDate As Date, _
-                              ByVal untilDate As Date, ByVal report As Variant, ByVal showCalendar As Boolean)
+                              ByVal untilDate As Date, ByVal report As Variant, ByVal showCalendar As Boolean, _
+                              ByVal calendarName As String)
     Const HEADER_ROW As Long = 6
     Const LAST_COL As Long = 7
     Dim keys() As String, sums() As Long, groups As Long
@@ -418,6 +421,7 @@ Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, B
     SetExcelStep "Blatt Bericht, Werte"
     sheet.Range("A1").Value = "Leistungsnachweis"
     sheet.Range("A2").Value = "Kunde: " & CustomerLabel(customer)
+    If Len(calendarName) > 0 Then sheet.Range("A2").Value = sheet.Range("A2").Value & ", Kalender: " & calendarName
     sheet.Range("A3").Value = "Zeitraum: " & DateText(fromDate) & " bis " & DateText(untilDate - 1)
     sheet.Range("A4").Value = "Erstellt am: " & DateText(Date)
     sheet.Range("A" & HEADER_ROW).Resize(1, LAST_COL).Value = _
@@ -506,51 +510,16 @@ Private Sub SetUpPage(ByVal sheet As Object, ByVal titleRows As String, ByVal ar
     sheet.Application.PrintCommunication = True
 End Sub
 
-' Needs the window, so only after the workbook is shown.
+' Gridlines belong to the window, so each sheet is activated in turn; only
+' after the workbook is shown. The first sheet stays active.
 Private Sub HideGridlines(ByVal xl As Object)
+    Dim ws As Object
     On Error Resume Next
-    xl.ActiveWindow.DisplayGridlines = False
-End Sub
-
-' An internal sheet with the appointments of one calendar, an autofilter and
-' a total of the visible rows. Errors go to the caller.
-Private Sub FillAppointmentSheet(ByVal sheet As Object, ByVal report As Variant)
-    Dim grid() As Variant, headers As Variant, n As Long, r As Long, c As Long
-    n = UBound(report, 1)
-
-    ' Formats before values: text columns stay text (no date from "2026-10",
-    ' no formula from "=..."), durations keep counting past 24 hours.
-    ' NumberFormat and Formula always take the English codes.
-    sheet.Columns(1).NumberFormat = "dd.mm.yyyy"
-    sheet.Range("B:C").NumberFormat = "hh:mm"
-    sheet.Columns(4).NumberFormat = "[h]:mm"
-    sheet.Range("E:H").NumberFormat = "@"
-
-    headers = Array("Datum", "Beginn", "Ende", "Dauer", "Gruppe", "Betreff", "Kategorien", "Text")
-    ReDim grid(1 To n + 1, 1 To 8)
-    For c = 1 To 8
-        grid(1, c) = headers(c - 1)
+    For Each ws In xl.ActiveWorkbook.Worksheets
+        ws.Activate
+        xl.ActiveWindow.DisplayGridlines = False
     Next
-    For r = 1 To n
-        grid(r + 1, 1) = DateSerial(Year(report(r, COL_START)), Month(report(r, COL_START)), Day(report(r, COL_START)))
-        grid(r + 1, 2) = TimeSerial(Hour(report(r, COL_START)), Minute(report(r, COL_START)), 0)
-        grid(r + 1, 3) = TimeSerial(Hour(report(r, COL_END)), Minute(report(r, COL_END)), 0)
-        grid(r + 1, 4) = report(r, COL_MINUTES) / 1440
-        grid(r + 1, 5) = report(r, COL_GROUP)
-        grid(r + 1, 6) = report(r, COL_SUBJECT)
-        grid(r + 1, 7) = report(r, COL_CATEGORIES)
-        grid(r + 1, 8) = Left$(Replace(TrimText(report(r, COL_BODY)), vbCr, ""), 32000)
-    Next
-    sheet.Range("A1").Resize(n + 1, 8).Value = grid
-    sheet.Range("A1").Resize(1, 8).Font.Bold = True
-    sheet.Range("A1").Resize(n + 1, 8).AutoFilter
-    sheet.Cells(n + 3, 3).Value = "Summe"
-    ' 109 = SUM over the rows the autofilter shows.
-    sheet.Cells(n + 3, 4).Formula = "=SUBTOTAL(109,D2:D" & (n + 1) & ")"
-    sheet.Cells(n + 3, 3).Resize(1, 2).Font.Bold = True
-    sheet.Range("A:G").Columns.AutoFit
-    sheet.Columns(8).ColumnWidth = 80
-    sheet.Columns(8).WrapText = False
+    xl.ActiveWorkbook.Worksheets(1).Activate
 End Sub
 
 ' Saves the report as CSV. Returns a status line for the final message.

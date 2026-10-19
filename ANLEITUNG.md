@@ -117,9 +117,10 @@ oder lesen ließen.
 - **Excel**: Das Blatt „Bericht“ ist für Ihren Kunden: Kopf mit Kunde und
   Zeitraum, alle Termine mit Text, Zwischensummen und Gesamtsumme, fertig für
   den Druck auf A4 quer. Bei mehreren Kalendern steht bei jedem Termin, aus
-  welchem Kalender er stammt. Danach folgt für Sie pro Kalender ein Blatt mit
-  Filter. Vor dem Versand diese Blätter löschen oder nur „Bericht“ als PDF
-  speichern (**Datei** > **Exportieren**). Die Mappe ist noch nicht
+  welchem Kalender er stammt. Danach folgt pro Kalender ein Blatt im selben
+  Aufbau, nur mit den Terminen dieses Kalenders. Vor dem Versand die Blätter
+  löschen, die Ihr Kunde nicht sehen soll, oder nur die passenden Blätter als
+  PDF speichern (**Datei** > **Exportieren**). Die Mappe ist noch nicht
   gespeichert. Erscheint eine Meldung „Excel-Fehler bei …“, öffnet sich
   stattdessen die CSV-Datei; den Text der Meldung bitte an uns weitergeben.
 
