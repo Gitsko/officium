@@ -14,6 +14,24 @@ Private Const MEETING_CANCELED As Long = 5           ' olMeetingCanceled
 Private Const MEETING_RECEIVED_CANCELED As Long = 7  ' olMeetingReceivedAndCanceled
 Private Const RESPONSE_DECLINED As Long = 4          ' olResponseDeclined
 
+' Numbers as offered in the grouping prompt.
+Public Enum OfficiumGrouping
+    ogMonth = 1
+    ogQuarter = 2
+    ogNone = 3
+End Enum
+
+' Columns of a report: a 2D array (1 To appointments, 1 To COL_COUNT) shared
+' by the summary and every export. Empty if no appointment matched.
+Public Const COL_START As Long = 1       ' Date
+Public Const COL_END As Long = 2         ' Date
+Public Const COL_MINUTES As Long = 3     ' Long
+Public Const COL_SUBJECT As Long = 4     ' String
+Public Const COL_CATEGORIES As Long = 5  ' String
+Public Const COL_BODY As Long = 6        ' String
+Public Const COL_GROUP As Long = 7       ' String, see GroupKey
+Public Const COL_COUNT As Long = 7
+
 ' Half-open range [fromDate, untilDate) of a preset period relative to today.
 Public Sub PeriodRange(ByVal period As OfficiumPeriod, ByVal today As Date, _
                        ByRef fromDate As Date, ByRef untilDate As Date)
@@ -70,4 +88,63 @@ Public Function CountsAsWork(ByVal isAllDay As Boolean, ByVal meetingState As Lo
     If meetingState = MEETING_CANCELED Or meetingState = MEETING_RECEIVED_CANCELED Then Exit Function
     If response = RESPONSE_DECLINED Then Exit Function
     CountsAsWork = True
+End Function
+
+' Group of an appointment start, sortable as text: "2026-10" by month,
+' "2026-Q4" by quarter, "" without grouping.
+Public Function GroupKey(ByVal startTime As Date, ByVal grouping As OfficiumGrouping) As String
+    Select Case grouping
+    Case ogMonth
+        GroupKey = Year(startTime) & "-" & Format(Month(startTime), "00")
+    Case ogQuarter
+        GroupKey = Year(startTime) & "-Q" & ((Month(startTime) - 1) \ 3 + 1)
+    Case ogNone
+        GroupKey = ""
+    Case Else
+        Err.Raise 5, "GroupKey", "Unknown grouping " & grouping
+    End Select
+End Function
+
+' Minutes as hours:minutes that keeps counting past 24 hours, e.g. 2250 -> "37:30".
+Public Function FormatMinutes(ByVal minutes As Long) As String
+    FormatMinutes = minutes \ 60 & ":" & Format(minutes Mod 60, "00")
+End Function
+
+' Sums the minutes of a report per group. Fills keys and sums (1-based, groups
+' in order of first appearance) and returns the number of groups.
+Public Function SumByGroup(ByVal report As Variant, ByRef keys() As String, ByRef sums() As Long) As Long
+    If IsEmpty(report) Then Exit Function
+    Dim n As Long, r As Long, g As Long
+    ReDim keys(1 To UBound(report, 1))
+    ReDim sums(1 To UBound(report, 1))
+    For r = 1 To UBound(report, 1)
+        g = 1
+        Do While g <= n
+            If keys(g) = report(r, COL_GROUP) Then Exit Do
+            g = g + 1
+        Loop
+        If g > n Then
+            n = g
+            keys(n) = report(r, COL_GROUP)
+        End If
+        sums(g) = sums(g) + report(r, COL_MINUTES)
+    Next
+    ReDim Preserve keys(1 To n)
+    ReDim Preserve sums(1 To n)
+    SumByGroup = n
+End Function
+
+' One line per group and a grand total with the number of appointments,
+' separated by tabs, e.g. "2026-10<Tab>37:30 h".
+Public Function TotalsText(ByVal report As Variant) As String
+    Dim keys() As String, sums() As Long, n As Long, g As Long, total As Long, lines As String
+    n = SumByGroup(report, keys, sums)
+    For g = 1 To n
+        total = total + sums(g)
+        If Len(keys(g)) > 0 Then lines = lines & keys(g) & vbTab & FormatMinutes(sums(g)) & " h" & vbCrLf
+    Next
+    Dim appointments As Long
+    If Not IsEmpty(report) Then appointments = UBound(report, 1)
+    TotalsText = lines & "Gesamt" & vbTab & FormatMinutes(total) & " h (" & appointments _
+        & IIf(appointments = 1, " Termin)", " Termine)")
 End Function

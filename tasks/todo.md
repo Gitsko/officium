@@ -101,6 +101,8 @@ and a grand total, formatted as hours:minutes.
 
 **Files likely touched:** `vba/OfficiumCore.bas`, `vba/OfficiumTests.bas`
 
+**Notes:** Code and tests written; self-test pending on the user's PC.
+
 **Estimated scope:** S
 
 ## Task 5: Dialog chain and on-screen summary
