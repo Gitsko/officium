@@ -9,4 +9,21 @@ describe("manifest", () => {
     expect(manifest.id).not.toBe("f2b103f1-1ab1-4e1b-8f0b-072aa3d4e19d");
     expect(JSON.stringify(manifest)).not.toMatch(/contoso/i);
   });
+
+  // New Outlook has no item-less calendar surface, so the pane hangs off opened items.
+  it("offers the task pane on read mails and on appointments", () => {
+    const contexts = manifest.extensions[0].ribbons.flatMap((r: { contexts: string[] }) => r.contexts);
+    expect(contexts).toEqual(
+      expect.arrayContaining(["mailRead", "meetingDetailsAttendee", "meetingDetailsOrganizer"])
+    );
+  });
+
+  it("only references actions that a runtime defines", () => {
+    const ext = manifest.extensions[0];
+    const actionIds = ext.runtimes.flatMap((r: { actions: { id: string }[] }) => r.actions.map((a) => a.id));
+    const referenced = JSON.stringify(ext.ribbons).match(/"actionId":"[^"]+"/g) ?? [];
+    for (const ref of referenced) {
+      expect(actionIds).toContain(ref.slice('"actionId":"'.length, -1));
+    }
+  });
 });

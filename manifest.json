@@ -1,137 +1,132 @@
 {
-    "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.24/MicrosoftTeams.schema.json",
-    "id": "19f5868c-d11d-43b0-85f2-a43e164d0c09",
-    "manifestVersion": "1.24",
-    "version": "1.0.0",
-    "name": {
-      "short": "Officium",
-      "full": "Officium – calendar reports"
-    },
-    "description": {
-      "short": "Summarize appointments per customer and period.",
-      "full": "Summarize calendar appointments per customer and period, group them by month or quarter and export the report."
-    },
-    "developer": {
-      "name": "Gitsko",
-      "websiteUrl": "https://github.com/Gitsko/officium",
-      "privacyUrl": "https://github.com/Gitsko/officium",
-      "termsOfUseUrl": "https://github.com/Gitsko/officium"
-    },
-    "icons": {
-      "outline": "assets/outline.png",
-      "color": "assets/color.png"
-    },
-    "accentColor": "#230201",
-    "localizationInfo": {
-      "defaultLanguageTag": "en-us",
-      "additionalLanguages": []
-    },
-    "authorization": {
-      "permissions": {
-        "resourceSpecific": [
-          {
-            "name": "MailboxItem.Read.User",
-            "type": "Delegated"
-          }
-        ]
-      }
-    },
-    "validDomains": [],
-    "extensions": [
-      {
-        "requirements": {
-          "scopes": ["mail"],
-          "capabilities": [
-            { "name": "Mailbox", "minVersion": "1.3" }
-          ]
-        },
-        "runtimes": [
-          {
-            "id": "TaskPaneRuntime",
-            "type": "general",
-            "code": {
-              "page": "https://localhost:3000/taskpane.html"
-            },
-            "lifetime": "short",
-            "actions": [
-              {
-                "id": "TaskPaneRuntimeShow",
-                "type":"openPage",
-                "pinnable": false
-              }
-            ]
-          },
-          {
-            "id": "CommandsRuntime",
-            "type": "general",
-            "code": {
-              "page": "https://localhost:3000/commands.html"
-            },
-            "lifetime": "short",
-            "actions": [
-              {
-                "id": "action",
-                "type": "executeFunction"
-              }
-            ]
-          }
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.24/MicrosoftTeams.schema.json",
+  "id": "19f5868c-d11d-43b0-85f2-a43e164d0c09",
+  "manifestVersion": "1.24",
+  "version": "1.0.0",
+  "name": {
+    "short": "Officium",
+    "full": "Officium – calendar reports"
+  },
+  "description": {
+    "short": "Summarize appointments per customer and period.",
+    "full": "Summarize calendar appointments per customer and period, group them by month or quarter and export the report."
+  },
+  "developer": {
+    "name": "Gitsko",
+    "websiteUrl": "https://github.com/Gitsko/officium",
+    "privacyUrl": "https://github.com/Gitsko/officium",
+    "termsOfUseUrl": "https://github.com/Gitsko/officium"
+  },
+  "icons": {
+    "outline": "assets/outline.png",
+    "color": "assets/color.png"
+  },
+  "accentColor": "#230201",
+  "localizationInfo": {
+    "defaultLanguageTag": "en-us",
+    "additionalLanguages": []
+  },
+  "authorization": {
+    "permissions": {
+      "resourceSpecific": [
+        {
+          "name": "MailboxItem.Read.User",
+          "type": "Delegated"
+        }
+      ]
+    }
+  },
+  "validDomains": [],
+  "extensions": [
+    {
+      "requirements": {
+        "scopes": [
+          "mail"
         ],
-        "ribbons": [
+        "capabilities": [
           {
-            "contexts": [
-              "mailRead"
-            ],
-            "tabs": [
-              {
-                "builtInTabId": "TabDefault",
-                "groups": [
-                  {
-                    "id": "msgReadGroup",
-                    "label": "Officium",
-                    "icons": [
-                      { "size": 16, "url": "https://localhost:3000/assets/icon-16.png" },
-                      { "size": 32, "url": "https://localhost:3000/assets/icon-32.png" },
-                      { "size": 80, "url": "https://localhost:3000/assets/icon-80.png" }
-                    ],
-                    "controls": [
-                      {
-                        "id": "msgReadOpenPaneButton",
-                        "type": "button",
-                        "label": "Show Task Pane",
-                        "icons": [
-                          { "size": 16, "url": "https://localhost:3000/assets/icon-16.png" },
-                          { "size": 32, "url": "https://localhost:3000/assets/icon-32.png" },
-                          { "size": 80, "url": "https://localhost:3000/assets/icon-80.png" }
-                        ],
-                        "supertip": {
-                          "title": "Show Task Pane",
-                          "description": "Opens a task pane"
-                        },
-                        "actionId": "TaskPaneRuntimeShow"
-                      },
-                      {
-                        "id": "ActionButton",
-                        "type": "button",
-                        "label": "Perform an action",
-                        "icons": [
-                          { "size": 16, "url": "https://localhost:3000/assets/icon-16.png" },
-                          { "size": 32, "url": "https://localhost:3000/assets/icon-32.png" },
-                          { "size": 80, "url": "https://localhost:3000/assets/icon-80.png" }
-                        ],
-                        "supertip": {
-                          "title": "Perform an action",
-                          "description": "Perform an action when clicked."
-                        },
-                        "actionId": "action"
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
+            "name": "Mailbox",
+            "minVersion": "1.3"
           }
         ]
-      }
-    ]
-  }
-  
+      },
+      "runtimes": [
+        {
+          "id": "TaskPaneRuntime",
+          "type": "general",
+          "code": {
+            "page": "https://localhost:3000/taskpane.html"
+          },
+          "lifetime": "short",
+          "actions": [
+            {
+              "id": "TaskPaneRuntimeShow",
+              "type": "openPage",
+              "pinnable": false
+            }
+          ]
+        }
+      ],
+      "ribbons": [
+        {
+          "contexts": [
+            "mailRead",
+            "meetingDetailsAttendee",
+            "meetingDetailsOrganizer"
+          ],
+          "tabs": [
+            {
+              "builtInTabId": "TabDefault",
+              "groups": [
+                {
+                  "id": "officiumGroup",
+                  "label": "Officium",
+                  "icons": [
+                    {
+                      "size": 16,
+                      "url": "https://localhost:3000/assets/icon-16.png"
+                    },
+                    {
+                      "size": 32,
+                      "url": "https://localhost:3000/assets/icon-32.png"
+                    },
+                    {
+                      "size": 80,
+                      "url": "https://localhost:3000/assets/icon-80.png"
+                    }
+                  ],
+                  "controls": [
+                    {
+                      "id": "officiumOpenPaneButton",
+                      "type": "button",
+                      "label": "Officium",
+                      "icons": [
+                        {
+                          "size": 16,
+                          "url": "https://localhost:3000/assets/icon-16.png"
+                        },
+                        {
+                          "size": 32,
+                          "url": "https://localhost:3000/assets/icon-32.png"
+                        },
+                        {
+                          "size": 80,
+                          "url": "https://localhost:3000/assets/icon-80.png"
+                        }
+                      ],
+                      "supertip": {
+                        "title": "Officium",
+                        "description": "Open the calendar report"
+                      },
+                      "actionId": "TaskPaneRuntimeShow"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
