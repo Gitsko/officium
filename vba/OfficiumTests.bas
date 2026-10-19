@@ -11,6 +11,8 @@ Public Sub OfficiumSelfTest()
     failed = 0
 
     TestPeriodRange
+    TestMatchesCustomer
+    TestCountsAsWork
 
     Dim summary As String
     summary = passed & " bestanden, " & failed & " fehlgeschlagen"
@@ -50,11 +52,32 @@ Private Sub TestPeriodRange()
     AssertEqual "last quarter across new year: until", #1/1/2027#, u
 End Sub
 
-Private Sub AssertEqual(ByVal name As String, ByVal expected As Variant, ByVal actual As Variant)
+Private Sub TestMatchesCustomer()
+    AssertEqual "customer: category", True, MatchesCustomer("Acme", "Workshop", "Acme")
+    AssertEqual "customer: category ignores case, ';' list", True, MatchesCustomer("acme", "Workshop", "Intern; ACME")
+    AssertEqual "customer: category in ',' list", True, MatchesCustomer("Acme", "Workshop", "Intern, Acme")
+    AssertEqual "customer: category must match whole", False, MatchesCustomer("Acme", "Workshop", "Acme Corp")
+    AssertEqual "customer: subject contains it", True, MatchesCustomer("Acme", "Call mit ACME GmbH", "")
+    AssertEqual "customer: no match", False, MatchesCustomer("Acme", "Workshop", "Intern")
+    AssertEqual "customer: empty input matches all", True, MatchesCustomer(" ", "Workshop", "")
+End Sub
+
+' Meeting status 1 = meeting, 3 = received; response 2 = tentative, 3 = accepted.
+Private Sub TestCountsAsWork()
+    AssertEqual "counts: appointment", True, CountsAsWork(False, 0, 0)
+    AssertEqual "counts: accepted meeting", True, CountsAsWork(False, 3, 3)
+    AssertEqual "counts: tentative meeting", True, CountsAsWork(False, 3, 2)
+    AssertEqual "counts: not all-day", False, CountsAsWork(True, 0, 0)
+    AssertEqual "counts: not cancelled", False, CountsAsWork(False, 5, 0)
+    AssertEqual "counts: not cancelled by organizer", False, CountsAsWork(False, 7, 3)
+    AssertEqual "counts: not declined", False, CountsAsWork(False, 3, 4)
+End Sub
+
+Private Sub AssertEqual(ByVal testName As String, ByVal expected As Variant, ByVal actual As Variant)
     If expected = actual Then
         passed = passed + 1
     Else
         failed = failed + 1
-        Debug.Print "FEHLER " & name & ": erwartet " & expected & ", erhalten " & actual
+        Debug.Print "FEHLER " & testName & ": erwartet " & expected & ", erhalten " & actual
     End If
 End Sub

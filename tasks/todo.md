@@ -80,6 +80,9 @@ all-day flag, meeting and response status) belong to the customer and count?
 
 **Files likely touched:** `vba/OfficiumCore.bas`, `vba/OfficiumTests.bas`
 
+**Notes:** Code and tests written; self-test pending on the user's PC. An
+empty customer matches every appointment.
+
 **Estimated scope:** S
 
 ## Task 4: Grouping by month/quarter with totals
