@@ -21,7 +21,8 @@ module.exports = async (env, options) => {
       taskpane: ["./src/taskpane/taskpane.ts", "./src/taskpane/taskpane.html"],
     },
     output: {
-      clean: true,
+      // Keep the app package from scripts/package.sh across builds.
+      clean: { keep: /^officium\.zip$/ },
     },
     resolve: {
       extensions: [".ts", ".html", ".js"],

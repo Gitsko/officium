@@ -5,11 +5,11 @@
   "version": "1.0.0",
   "name": {
     "short": "Officium",
-    "full": "Officium – calendar reports"
+    "full": "Officium – Kalenderberichte"
   },
   "description": {
-    "short": "Summarize appointments per customer and period.",
-    "full": "Summarize calendar appointments per customer and period, group them by month or quarter and export the report."
+    "short": "Termine pro Kunde und Zeitraum zusammenfassen.",
+    "full": "Kalendertermine pro Kunde und Zeitraum zusammenfassen, nach Monat oder Quartal gruppieren und als Bericht exportieren."
   },
   "developer": {
     "name": "Gitsko",
@@ -23,14 +23,14 @@
   },
   "accentColor": "#230201",
   "localizationInfo": {
-    "defaultLanguageTag": "en-us",
+    "defaultLanguageTag": "de-de",
     "additionalLanguages": []
   },
   "authorization": {
     "permissions": {
       "resourceSpecific": [
         {
-          "name": "MailboxItem.Read.User",
+          "name": "MailboxItem.Restricted.User",
           "type": "Delegated"
         }
       ]
@@ -116,7 +116,7 @@
                       ],
                       "supertip": {
                         "title": "Officium",
-                        "description": "Open the calendar report"
+                        "description": "Kalenderbericht öffnen"
                       },
                       "actionId": "TaskPaneRuntimeShow"
                     }
