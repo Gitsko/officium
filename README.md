@@ -126,8 +126,12 @@ Den Button anklicken, oder mit **Alt+F8** die Makroliste öffnen und
 
 Abbrechen bei einer der Fragen beendet das Makro, ohne etwas zu ändern.
 
-Danach zeigt eine Meldung die Summen und wohin der Bericht gegangen ist. Nach
-**OK** öffnet sich Excel, oder ohne Excel die CSV-Datei.
+Solange Officium sucht und die Mappe baut, zeigt ein kleines Fenster ohne
+Schaltflächen den aktuellen Schritt, etwa „Kalender 2 von 5: …“. Es ist
+über die Windows-API gebaut und braucht kein eigenes Formular. Ein zweiter
+Klick auf den Button während des Laufs wird ignoriert. Danach zeigt eine
+Meldung die Summen und wohin der Bericht gegangen ist. Nach **OK** öffnet sich
+Excel, oder ohne Excel die CSV-Datei.
 
 ### Welche Termine zählen
 
@@ -198,6 +202,9 @@ Weil der Code noch nie gelaufen ist, beim ersten Mal diese Punkte prüfen:
    Blatt „Bericht“ nur einmal.
 8. Die Druckvorschau des Blatts „Bericht“ zeigt A4 quer, alle Spalten auf der
    Seitenbreite und die Zwischensummen stimmen.
+9. Während des Laufs zeigt das Fortschrittsfenster die Kalender und die
+   Excel-Schritte; vor jeder Meldung und vor dem Öffnen von Excel ist es
+   verschwunden.
 
 Fehlermeldungen samt der markierten Codezeile helfen bei der Korrektur.
 

@@ -86,8 +86,10 @@ Auf den Button klicken. Officium fragt nacheinander:
 
 **Abbrechen** beendet Officium jederzeit.
 
-Danach zeigt eine Meldung die Summen. Nach **OK** öffnet sich der Bericht in
-Excel, ohne Excel die CSV-Datei.
+Während Officium arbeitet, zeigt ein kleines Fenster in der Bildschirmmitte,
+welcher Kalender gerade gelesen wird und woran Excel gerade baut. Danach zeigt
+eine Meldung die Summen. Nach **OK** öffnet sich der Bericht in Excel, ohne
+Excel die CSV-Datei.
 
 ## Welche Termine zählen
 

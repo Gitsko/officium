@@ -14,12 +14,39 @@ Private Declare PtrSafe Function GlobalFree Lib "kernel32" (ByVal hMem As LongPt
 Private Declare PtrSafe Sub CopyMemory Lib "kernel32" Alias "RtlMoveMemory" _
     (ByVal destination As LongPtr, ByVal source As LongPtr, ByVal length As LongPtr)
 
+' Windows API for the progress window, a plain text window without a form.
+Private Declare PtrSafe Function CreateWindowExW Lib "user32" (ByVal exStyle As Long, ByVal classPtr As LongPtr, _
+    ByVal textPtr As LongPtr, ByVal windowStyle As Long, ByVal posX As Long, ByVal posY As Long, _
+    ByVal sizeX As Long, ByVal sizeY As Long, ByVal hWndParent As LongPtr, ByVal hMenu As LongPtr, _
+    ByVal hInstance As LongPtr, ByVal createParam As LongPtr) As LongPtr
+Private Declare PtrSafe Function SetWindowTextW Lib "user32" (ByVal hWnd As LongPtr, ByVal textPtr As LongPtr) As Long
+Private Declare PtrSafe Function UpdateWindow Lib "user32" (ByVal hWnd As LongPtr) As Long
+Private Declare PtrSafe Function DestroyWindow Lib "user32" (ByVal hWnd As LongPtr) As Long
+Private Declare PtrSafe Function GetSystemMetrics Lib "user32" (ByVal metric As Long) As Long
+Private Declare PtrSafe Function SendMessageW Lib "user32" _
+    (ByVal hWnd As LongPtr, ByVal message As Long, ByVal wParam As LongPtr, ByVal lParam As LongPtr) As LongPtr
+Private Declare PtrSafe Function GetModuleHandleW Lib "kernel32" (ByVal moduleName As LongPtr) As LongPtr
+Private Declare PtrSafe Function GetStockObject Lib "gdi32" (ByVal objectIndex As Long) As LongPtr
+
 ' The step ShowInExcel is working on, named in its error message.
 Private excelStep As String
+' The progress window while a report is made, 0 when none is shown.
+Private progressWindow As LongPtr
+' True while OfficiumReport runs; the progress window lets Outlook take clicks.
+Private reportRunning As Boolean
 
 ' Asks for period, customer and grouping and shows the totals of the matching
 ' appointments of all calendars, including shared ones.
 Public Sub OfficiumReport()
+    If reportRunning Then Exit Sub
+    reportRunning = True
+    MakeReport
+    CloseProgress
+    reportRunning = False
+End Sub
+
+' Asks the questions and makes the report; OfficiumReport guards it.
+Private Sub MakeReport()
     Dim fromDate As Date, untilDate As Date, customer As String, grouping As Long
     If Not AskPeriod(fromDate, untilDate) Then Exit Sub
     If Not AskCustomer(customer) Then Exit Sub
@@ -29,15 +56,18 @@ Public Sub OfficiumReport()
     On Error GoTo Failed
     Dim title As String, report As Variant, calendars As Collection, skipped As String, note As String
     title = ReportTitle(customer, fromDate, untilDate)
+    ShowProgress "Kalender werden gesucht"
     Set calendars = AllCalendars(skipped)
     report = CollectReport(calendars, fromDate, untilDate, customer, grouping, skipped)
     note = CalendarNote(calendars.Count, skipped)
     If IsEmpty(report) Then
+        CloseProgress
         MsgBox "Keine passenden Termine." & vbCrLf & vbCrLf & title & vbCrLf & vbCrLf & note, _
             vbInformation, "Officium"
         Exit Sub
     End If
     Dim csvPath As String, results As String, xl As Object
+    ShowProgress "CSV-Datei und Zwischenablage"
     csvPath = DocumentsFolder() & "\" & CsvFileName(customer, fromDate, untilDate)
     results = SaveCsv(csvPath, report)
     If CopyToClipboard(ClipboardText(title, report)) Then
@@ -45,11 +75,13 @@ Public Sub OfficiumReport()
     Else
         results = results & vbCrLf & "Zwischenablage war belegt, Text nicht kopiert."
     End If
+    ShowProgress "Excel wird gestartet"
     Set xl = StartExcel()
     If Not xl Is Nothing Then results = results & vbCrLf & "Nach OK öffnet sich der Bericht in Excel."
 
     ' The message comes before Excel opens: shown later it could end up behind
     ' the Excel window and Outlook would seem to hang.
+    CloseProgress
     MsgBox title & vbCrLf & vbCrLf & TotalsText(report) & vbCrLf & vbCrLf & note & vbCrLf & results, _
         vbInformation, "Officium"
     If xl Is Nothing Then
@@ -60,6 +92,7 @@ Public Sub OfficiumReport()
     Exit Sub
 
 Failed:
+    CloseProgress
     MsgBox "Officium wurde mit einem Fehler abgebrochen:" & vbCrLf & vbCrLf & _
         Err.Description & " (" & Err.Number & ")", vbCritical, "Officium"
 End Sub
@@ -136,8 +169,10 @@ End Sub
 Private Function CollectReport(ByVal calendars As Collection, ByVal fromDate As Date, ByVal untilDate As Date, _
                                ByVal customer As String, ByVal grouping As OfficiumGrouping, _
                                ByRef skipped As String) As Variant
-    Dim entry As Variant, matches As New Collection
+    Dim entry As Variant, matches As New Collection, calendarNumber As Long
     For Each entry In calendars
+        calendarNumber = calendarNumber + 1
+        ShowProgress "Kalender " & calendarNumber & " von " & calendars.Count & ": " & entry(1)
         If Not AddMatches(matches, entry(0), entry(1), fromDate, untilDate, customer, grouping) Then
             AppendName skipped, entry(1)
         End If
@@ -246,7 +281,7 @@ Private Function ShowInExcel(ByVal xl As Object, ByVal customer As String, ByVal
     On Error GoTo Failed
     Dim book As Object, sheet As Object, takenNames As New Collection
     Dim names() As String, sums() As Long, calendarCount As Long, i As Long
-    excelStep = "Mappe anlegen"
+    SetExcelStep "Mappe anlegen"
     calendarCount = SumByColumn(report, COL_CALENDAR, names, sums)
     Set book = xl.Workbooks.Add(-4167)  ' xlWBATWorksheet: a single sheet
     Set sheet = book.Worksheets(1)
@@ -254,20 +289,22 @@ Private Function ShowInExcel(ByVal xl As Object, ByVal customer As String, ByVal
     FillCustomerSheet sheet, customer, fromDate, untilDate, report, calendarCount > 1
 
     For i = 1 To calendarCount
-        excelStep = "Blatt " & names(i)
+        SetExcelStep "Blatt " & names(i)
         Set sheet = book.Worksheets.Add(After:=book.Worksheets(book.Worksheets.Count))
         sheet.Name = SheetName(names(i), takenNames)
         FillAppointmentSheet sheet, RowsWhere(report, COL_CALENDAR, names(i))
     Next
 
-    excelStep = "Mappe anzeigen"
+    SetExcelStep "Mappe anzeigen"
     book.Worksheets(1).Activate
+    CloseProgress
     xl.Visible = True
     HideGridlines xl
     ShowInExcel = True
     Exit Function
 
 Failed:
+    CloseProgress
     MsgBox "Excel-Fehler bei """ & excelStep & """: " & Err.Description & " (" & Err.Number & ")" & _
         vbCrLf & vbCrLf & _
         "Officium öffnet stattdessen die CSV-Datei.", vbExclamation, "Officium"
@@ -278,6 +315,42 @@ CloseExcel:
     xl.DisplayAlerts = False
     xl.Quit
 End Function
+
+' Remembers the step for the error message and shows it in the progress window.
+Private Sub SetExcelStep(ByVal stepName As String)
+    excelStep = stepName
+    ShowProgress "Excel-Bericht: " & stepName
+End Sub
+
+' Shows the text in a small window in the middle of the screen, opening it if
+' needed. DoEvents lets Windows paint it and keeps Outlook from being marked
+' as not responding. Without the window the report still runs.
+Private Sub ShowProgress(ByVal statusText As String)
+    Const WS_POPUP As Long = &H80000000, WS_VISIBLE As Long = &H10000000, WS_DLGFRAME As Long = &H400000
+    Const SS_CENTER As Long = 1, WS_EX_TOPMOST As Long = 8, WS_EX_TOOLWINDOW As Long = &H80
+    Const WM_SETFONT As Long = &H30, DEFAULT_GUI_FONT As Long = 17
+    Const WINDOW_WIDTH As Long = 460, WINDOW_HEIGHT As Long = 90
+    On Error Resume Next
+    If progressWindow = 0 Then
+        progressWindow = CreateWindowExW(WS_EX_TOPMOST Or WS_EX_TOOLWINDOW, StrPtr("STATIC"), 0, _
+            WS_POPUP Or WS_VISIBLE Or WS_DLGFRAME Or SS_CENTER, _
+            (GetSystemMetrics(0) - WINDOW_WIDTH) \ 2, (GetSystemMetrics(1) - WINDOW_HEIGHT) \ 2, _
+            WINDOW_WIDTH, WINDOW_HEIGHT, 0, 0, GetModuleHandleW(0), 0)
+        If progressWindow = 0 Then Exit Sub
+        SendMessageW progressWindow, WM_SETFONT, GetStockObject(DEFAULT_GUI_FONT), 0
+    End If
+    SetWindowTextW progressWindow, StrPtr(vbCrLf & "Officium erstellt den Bericht ..." & vbCrLf & vbCrLf & statusText)
+    UpdateWindow progressWindow
+    DoEvents
+End Sub
+
+' Closes the progress window. It stays on top, so it has to go before every
+' message box.
+Private Sub CloseProgress()
+    If progressWindow = 0 Then Exit Sub
+    DestroyWindow progressWindow
+    progressWindow = 0
+End Sub
 
 ' The sheet for the customer: title block in rows 1 to 4, the table from
 ' row 6. Per group a heading row and a subtotal, at the end the total.
@@ -322,7 +395,7 @@ Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, B
 
     Dim lastRow As Long, rowNumber As Variant, subtotal As Variant
     lastRow = HEADER_ROW + n
-    excelStep = "Blatt Bericht, Formate"
+    SetExcelStep "Blatt Bericht, Formate"
     ' Formats before values: labels and texts stay text (Excel would read
     ' "Oktober 2026" as a date), durations keep counting past 24 hours.
     sheet.Columns(1).NumberFormat = "dd.mm.yyyy"
@@ -338,7 +411,7 @@ Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, B
     Next
     sheet.Cells(lastRow, 1).NumberFormat = "@"
 
-    excelStep = "Blatt Bericht, Werte"
+    SetExcelStep "Blatt Bericht, Werte"
     sheet.Range("A1").Value = "Leistungsnachweis"
     sheet.Range("A2").Value = "Kunde: " & CustomerLabel(customer)
     sheet.Range("A3").Value = "Zeitraum: " & DateText(fromDate) & " bis " & DateText(untilDate - 1)
@@ -354,7 +427,7 @@ Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, B
     Next
     sheet.Cells(lastRow, 4).Formula = "=SUBTOTAL(9,D" & (HEADER_ROW + 1) & ":D" & (lastRow - 1) & ")"
 
-    excelStep = "Blatt Bericht, Gestaltung"
+    SetExcelStep "Blatt Bericht, Gestaltung"
     sheet.Range("A1").Font.Size = 16
     sheet.Range("A1").Font.Bold = True
     sheet.Columns(1).ColumnWidth = 11
@@ -395,7 +468,7 @@ Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, B
         lastColumn = "F"
     End If
     sheet.Range("A" & (HEADER_ROW + 1)).Resize(n, LAST_COL).Rows.AutoFit
-    excelStep = "Blatt Bericht, Seite einrichten"
+    SetExcelStep "Blatt Bericht, Seite einrichten"
     SetUpPage sheet, "$" & HEADER_ROW & ":$" & HEADER_ROW, "A1:" & lastColumn & lastRow
 End Sub
 
