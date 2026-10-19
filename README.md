@@ -145,7 +145,7 @@ sind, auch freigegebene, dazu den Standardkalender jedes Postfachs im Profil.
 Ein freigegebener Kalender, der dort nicht steht, fehlt im Bericht; im
 Zweifel einmal in der Kalenderansicht anhaken und den Bericht neu erstellen.
 Die Meldung am Ende nennt die Zahl der durchsuchten Kalender und die, die
-sich nicht lesen ließen. Steht derselbe Termin (gleicher Beginn, gleiches Ende,
+sich nicht öffnen oder lesen ließen. Steht derselbe Termin (gleicher Beginn, gleiches Ende,
 gleicher Betreff) in mehreren Kalendern, zählt er nur einmal, und zwar beim
 zuerst gelesenen Kalender.
 
@@ -163,11 +163,13 @@ Dauer, Betreff und der ersten Zeile des Termintexts.
 **Excel**: Das erste Blatt „Bericht“ ist für den Kunden gedacht: Kopf mit
 Kunde, Zeitraum und Erstellungsdatum, die Termine nach Datum mit dem
 vollständigen Termintext, eine Zwischensumme pro Monat oder Quartal und die
-Gesamtsumme. Es ist für A4 quer eingerichtet, die Kopfzeile wiederholt sich
+Gesamtsumme. Kommen die Termine aus mehreren Kalendern, zeigt eine Spalte
+„Kalender“, aus welchem. Es ist für A4 quer eingerichtet, die Kopfzeile wiederholt sich
 auf jeder Seite. Danach folgt pro Kalender ein internes Blatt mit Autofilter
 und einer Summe, die sich nach dem Filter richtet. Vor dem Versand die
 internen Blätter löschen oder nur das Blatt „Bericht“ als PDF speichern. Die
-Mappe ist nicht gespeichert.
+Mappe ist nicht gespeichert. Scheitert Excel, nennt die Meldung den Schritt
+und die Fehlernummer, danach öffnet sich die CSV-Datei.
 
 Die CSV-Datei hat eine Spalte „Kalender“.
 

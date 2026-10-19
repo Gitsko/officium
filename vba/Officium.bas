@@ -14,6 +14,9 @@ Private Declare PtrSafe Function GlobalFree Lib "kernel32" (ByVal hMem As LongPt
 Private Declare PtrSafe Sub CopyMemory Lib "kernel32" Alias "RtlMoveMemory" _
     (ByVal destination As LongPtr, ByVal source As LongPtr, ByVal length As LongPtr)
 
+' The step ShowInExcel is working on, named in its error message.
+Private excelStep As String
+
 ' Asks for period, customer and grouping and shows the totals of the matching
 ' appointments of all calendars, including shared ones.
 Public Sub OfficiumReport()
@@ -26,7 +29,7 @@ Public Sub OfficiumReport()
     On Error GoTo Failed
     Dim title As String, report As Variant, calendars As Collection, skipped As String, note As String
     title = ReportTitle(customer, fromDate, untilDate)
-    Set calendars = AllCalendars()
+    Set calendars = AllCalendars(skipped)
     report = CollectReport(calendars, fromDate, untilDate, customer, grouping, skipped)
     note = CalendarNote(calendars.Count, skipped)
     If IsEmpty(report) Then
@@ -70,8 +73,9 @@ End Function
 ' Every calendar the user sees in Outlook, each as Array(folder, name): the
 ' ones in the navigation pane of the calendar view, including shared
 ' calendars, then the default calendar of each mailbox in the profile.
-' A calendar reached both ways is listed once.
-Private Function AllCalendars() As Collection
+' A calendar reached both ways is listed once. Calendars of the navigation
+' pane that cannot be opened are appended to skipped.
+Private Function AllCalendars(ByRef skipped As String) As Collection
     Dim calendars As New Collection, calModule As Object, grp As Object, nav As Object
     Dim st As Object, calendarFolder As Object
     ' Without an Outlook window or with a shared calendar that is gone, single
@@ -81,7 +85,13 @@ Private Function AllCalendars() As Collection
     If Not calModule Is Nothing Then
         For Each grp In calModule.NavigationGroups
             For Each nav In grp.NavigationFolders
-                AddCalendar calendars, nav.Folder, nav.DisplayName
+                Set calendarFolder = Nothing
+                Set calendarFolder = nav.Folder
+                If calendarFolder Is Nothing Then
+                    AppendName skipped, nav.DisplayName
+                Else
+                    AddCalendar calendars, calendarFolder, nav.DisplayName
+                End If
             Next
         Next
     End If
@@ -113,6 +123,12 @@ Private Sub AddCalendar(ByVal calendars As Collection, ByVal calendarFolder As O
     calendars.Add Array(calendarFolder, uniqueName), calendarFolder.EntryID
 End Sub
 
+' Appends a name to a list separated by commas.
+Private Sub AppendName(ByRef list As String, ByVal itemName As String)
+    If Len(list) > 0 Then list = list & ", "
+    list = list & itemName
+End Sub
+
 ' Report (see COL_* in OfficiumCore) of the appointments that start in
 ' [fromDate, untilDate), belong to the customer and count as work, from all
 ' given calendars. Calendars that fail are listed in skipped. Empty if there
@@ -123,8 +139,7 @@ Private Function CollectReport(ByVal calendars As Collection, ByVal fromDate As 
     Dim entry As Variant, matches As New Collection
     For Each entry In calendars
         If Not AddMatches(matches, entry(0), entry(1), fromDate, untilDate, customer, grouping) Then
-            If Len(skipped) > 0 Then skipped = skipped & ", "
-            skipped = skipped & entry(1)
+            AppendName skipped, entry(1)
         End If
     Next
     If matches.Count = 0 Then Exit Function
@@ -230,19 +245,22 @@ Private Function ShowInExcel(ByVal xl As Object, ByVal customer As String, ByVal
                              ByVal untilDate As Date, ByVal report As Variant) As Boolean
     On Error GoTo Failed
     Dim book As Object, sheet As Object, takenNames As New Collection
+    Dim names() As String, sums() As Long, calendarCount As Long, i As Long
+    excelStep = "Mappe anlegen"
+    calendarCount = SumByColumn(report, COL_CALENDAR, names, sums)
     Set book = xl.Workbooks.Add(-4167)  ' xlWBATWorksheet: a single sheet
     Set sheet = book.Worksheets(1)
     sheet.Name = SheetName("Bericht", takenNames)
-    FillCustomerSheet sheet, customer, fromDate, untilDate, report
+    FillCustomerSheet sheet, customer, fromDate, untilDate, report, calendarCount > 1
 
-    Dim names() As String, sums() As Long, calendarCount As Long, i As Long
-    calendarCount = SumByColumn(report, COL_CALENDAR, names, sums)
     For i = 1 To calendarCount
+        excelStep = "Blatt " & names(i)
         Set sheet = book.Worksheets.Add(After:=book.Worksheets(book.Worksheets.Count))
         sheet.Name = SheetName(names(i), takenNames)
         FillAppointmentSheet sheet, RowsWhere(report, COL_CALENDAR, names(i))
     Next
 
+    excelStep = "Mappe anzeigen"
     book.Worksheets(1).Activate
     xl.Visible = True
     HideGridlines xl
@@ -250,7 +268,8 @@ Private Function ShowInExcel(ByVal xl As Object, ByVal customer As String, ByVal
     Exit Function
 
 Failed:
-    MsgBox "Excel-Fehler: " & Err.Description & vbCrLf & vbCrLf & _
+    MsgBox "Excel-Fehler bei """ & excelStep & """: " & Err.Description & " (" & Err.Number & ")" & _
+        vbCrLf & vbCrLf & _
         "Officium öffnet stattdessen die CSV-Datei.", vbExclamation, "Officium"
     ' Resume leaves the error handler; inside it On Error Resume Next has no effect.
     Resume CloseExcel
@@ -262,11 +281,12 @@ End Function
 
 ' The sheet for the customer: title block in rows 1 to 4, the table from
 ' row 6. Per group a heading row and a subtotal, at the end the total.
-' Errors go to the caller.
+' The column "Kalender" says whose calendar an appointment comes from; it is
+' removed when all appointments come from one calendar. Errors go to the caller.
 Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, ByVal fromDate As Date, _
-                              ByVal untilDate As Date, ByVal report As Variant)
+                              ByVal untilDate As Date, ByVal report As Variant, ByVal showCalendar As Boolean)
     Const HEADER_ROW As Long = 6
-    Const LAST_COL As Long = 6
+    Const LAST_COL As Long = 7
     Dim keys() As String, sums() As Long, groups As Long
     groups = SumByGroup(report, keys, sums)
 
@@ -291,9 +311,10 @@ Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, B
         grid(n, 2) = TimeSerial(Hour(report(r, COL_START)), Minute(report(r, COL_START)), 0)
         grid(n, 3) = TimeSerial(Hour(report(r, COL_END)), Minute(report(r, COL_END)), 0)
         grid(n, 4) = report(r, COL_MINUTES) / 1440
-        grid(n, 5) = report(r, COL_SUBJECT)
+        grid(n, 5) = report(r, COL_CALENDAR)
+        grid(n, 6) = report(r, COL_SUBJECT)
         ' Excel breaks lines at LF only; a cell holds at most 32767 characters.
-        grid(n, 6) = Left$(Replace(TrimText(report(r, COL_BODY)), vbCr, ""), 32000)
+        grid(n, 7) = Left$(Replace(TrimText(report(r, COL_BODY)), vbCr, ""), 32000)
     Next
     AddSubtotal grid, n, HEADER_ROW, firstRow, currentGroup, subtotalRows
     n = n + 1
@@ -301,12 +322,13 @@ Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, B
 
     Dim lastRow As Long, rowNumber As Variant, subtotal As Variant
     lastRow = HEADER_ROW + n
+    excelStep = "Blatt Bericht, Formate"
     ' Formats before values: labels and texts stay text (Excel would read
     ' "Oktober 2026" as a date), durations keep counting past 24 hours.
     sheet.Columns(1).NumberFormat = "dd.mm.yyyy"
     sheet.Range("B:C").NumberFormat = "hh:mm"
     sheet.Columns(4).NumberFormat = "[h]:mm"
-    sheet.Range("E:F").NumberFormat = "@"
+    sheet.Range("E:G").NumberFormat = "@"
     sheet.Range("A1:A4").NumberFormat = "@"
     For Each rowNumber In headingRows
         sheet.Cells(rowNumber, 1).NumberFormat = "@"
@@ -316,12 +338,13 @@ Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, B
     Next
     sheet.Cells(lastRow, 1).NumberFormat = "@"
 
+    excelStep = "Blatt Bericht, Werte"
     sheet.Range("A1").Value = "Leistungsnachweis"
     sheet.Range("A2").Value = "Kunde: " & CustomerLabel(customer)
     sheet.Range("A3").Value = "Zeitraum: " & DateText(fromDate) & " bis " & DateText(untilDate - 1)
     sheet.Range("A4").Value = "Erstellt am: " & DateText(Date)
     sheet.Range("A" & HEADER_ROW).Resize(1, LAST_COL).Value = _
-        Array("Datum", "Beginn", "Ende", "Dauer", "Betreff", "Beschreibung")
+        Array("Datum", "Beginn", "Ende", "Dauer", "Kalender", "Betreff", "Beschreibung")
     ' One assignment for all cells; cell by cell is slow with many appointments.
     sheet.Range("A" & (HEADER_ROW + 1)).Resize(n, LAST_COL).Value = grid
     ' Formula takes the English names. SUBTOTAL skips the subtotals above, so
@@ -331,13 +354,15 @@ Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, B
     Next
     sheet.Cells(lastRow, 4).Formula = "=SUBTOTAL(9,D" & (HEADER_ROW + 1) & ":D" & (lastRow - 1) & ")"
 
+    excelStep = "Blatt Bericht, Gestaltung"
     sheet.Range("A1").Font.Size = 16
     sheet.Range("A1").Font.Bold = True
     sheet.Columns(1).ColumnWidth = 11
     sheet.Range("B:C").ColumnWidth = 7
     sheet.Columns(4).ColumnWidth = 8
-    sheet.Columns(5).ColumnWidth = 35
-    sheet.Columns(6).ColumnWidth = 70
+    sheet.Columns(5).ColumnWidth = 20
+    sheet.Columns(6).ColumnWidth = 35
+    sheet.Columns(7).ColumnWidth = 70
     With sheet.Range("A" & HEADER_ROW).Resize(1, LAST_COL)
         .Font.Bold = True
         .Font.Color = RGB(255, 255, 255)
@@ -347,6 +372,7 @@ Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, B
         .VerticalAlignment = -4160  ' xlTop
         .Columns(5).WrapText = True
         .Columns(6).WrapText = True
+        .Columns(7).WrapText = True
         .Borders(12).LineStyle = 1  ' xlInsideHorizontal, xlContinuous
         .Borders(12).Color = RGB(217, 217, 217)
     End With
@@ -362,8 +388,15 @@ Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, B
         .Borders(8).LineStyle = 1        ' xlEdgeTop
         .Borders(9).LineStyle = -4119    ' xlEdgeBottom, xlDouble
     End With
+    Dim lastColumn As String
+    lastColumn = "G"
+    If Not showCalendar Then
+        sheet.Columns(5).Delete
+        lastColumn = "F"
+    End If
     sheet.Range("A" & (HEADER_ROW + 1)).Resize(n, LAST_COL).Rows.AutoFit
-    SetUpPage sheet, "$" & HEADER_ROW & ":$" & HEADER_ROW, "A1:F" & lastRow
+    excelStep = "Blatt Bericht, Seite einrichten"
+    SetUpPage sheet, "$" & HEADER_ROW & ":$" & HEADER_ROW, "A1:" & lastColumn & lastRow
 End Sub
 
 ' Closes a named group in the customer sheet with a row "Summe <group>".
@@ -378,8 +411,11 @@ End Sub
 
 ' A4 landscape, as wide as one page, header row on every page, page numbers.
 ' Skipped without a printer, where Excel cannot read the page setup.
+' PrintCommunication off sends all settings to the printer driver at once
+' instead of one call per property, which takes seconds.
 Private Sub SetUpPage(ByVal sheet As Object, ByVal titleRows As String, ByVal area As String)
     On Error Resume Next
+    sheet.Application.PrintCommunication = False
     With sheet.PageSetup
         .PrintArea = area
         .PrintTitleRows = titleRows
@@ -390,6 +426,7 @@ Private Sub SetUpPage(ByVal sheet As Object, ByVal titleRows As String, ByVal ar
         .FitToPagesTall = False
         .CenterFooter = "Seite &P von &N"
     End With
+    sheet.Application.PrintCommunication = True
 End Sub
 
 ' Needs the window, so only after the workbook is shown.

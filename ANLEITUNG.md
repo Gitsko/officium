@@ -86,8 +86,8 @@ Monat, in dem er beginnt.
 Gelesen werden alle Kalender, die links in der Kalenderansicht stehen, auch
 freigegebene. Fehlt ein freigegebener Kalender, ihn dort einmal anhaken. Steht
 derselbe Termin in mehreren Kalendern, zählt er nur einmal. Die Meldung am Ende
-nennt, wie viele Kalender durchsucht wurden und welche sich nicht lesen
-ließen.
+nennt, wie viele Kalender durchsucht wurden und welche sich nicht öffnen
+oder lesen ließen.
 
 ## Wo der Bericht landet
 
@@ -100,10 +100,12 @@ ließen.
   die erste Zeile des Termintexts.
 - **Excel**: Das Blatt „Bericht“ ist für Ihren Kunden: Kopf mit Kunde und
   Zeitraum, alle Termine mit Text, Zwischensummen und Gesamtsumme, fertig für
-  den Druck auf A4 quer. Danach folgt für Sie pro Kalender ein Blatt mit
+  den Druck auf A4 quer. Bei mehreren Kalendern steht bei jedem Termin, aus
+  welchem Kalender er stammt. Danach folgt für Sie pro Kalender ein Blatt mit
   Filter. Vor dem Versand diese Blätter löschen oder nur „Bericht“ als PDF
   speichern (**Datei** > **Exportieren**). Die Mappe ist noch nicht
-  gespeichert.
+  gespeichert. Erscheint eine Meldung „Excel-Fehler bei …“, öffnet sich
+  stattdessen die CSV-Datei; den Text der Meldung bitte an uns weitergeben.
 
 ## Neue Version einspielen
 
