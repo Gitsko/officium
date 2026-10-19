@@ -653,8 +653,9 @@ Public Sub OfficiumListAppointments()
         Exit Sub
     End If
 
-    Dim calendars As Collection, entry As Variant, found As Long, total As Long
-    Set calendars = AllCalendars()
+    Dim calendars As Collection, entry As Variant, found As Long, total As Long, skipped As String
+    Set calendars = AllCalendars(skipped)
+    If Len(skipped) > 0 Then Debug.Print "Nicht lesbar: " & skipped
     Debug.Print "--- Officium: " & Format(fromDate, "Short Date") & " bis " & Format(toDate, "Short Date") & " ---"
     For Each entry In calendars
         Debug.Print "== " & entry(1)
