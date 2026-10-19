@@ -1,106 +1,113 @@
-# Implementation Plan: Officium (Outlook calendar report add-in)
+# Implementation Plan: Officium (Outlook calendar report macro)
 
 ## Overview
 
-Officium is an Outlook add-in for the new Outlook / Outlook on the web (Microsoft 365) that
-summarizes calendar appointments for one customer over a chosen period. The
-user picks a date range and a customer filter. The add-in lists date, duration,
-subject and body text of every matching appointment, sums the durations and
-groups them by month or quarter. It exports to CSV, clipboard text and XLSX.
-The model is VBOffice olReporter; v1 covers appointments only (no tasks, no
-journal, no mail sending).
+Officium summarizes the calendar appointments of one customer over a chosen
+period in classic Outlook for Windows. The user picks a period, a customer and
+a grouping (none, month, quarter). Officium lists date, start, end, duration,
+subject and body text of every matching appointment, sums the durations per
+group and overall, and exports the report as CSV and as plain text on the
+clipboard. If Excel is installed, it also opens the report in Excel. The model
+is VBOffice olReporter; v1 covers appointments only (no tasks, no journal, no
+mail sending).
 
 ## Architecture Decisions
 
-- **Office Web Add-in (TypeScript), task pane.** VSTO is ruled out because it
-  does not run in the new Outlook. Scaffold with the current Yeoman Office
-  generator (`yo office`). The spike decides between the unified JSON manifest
-  and the XML manifest: check which one the generator produces today and which
-  one NAA in new Outlook requires.
-- **Data source: Microsoft Graph `GET /me/calendarView`.** Office.js only
-  exposes the current item and cannot enumerate a date range. EWS
-  (`makeEwsRequestAsync`) and the legacy Outlook REST API are retired for
-  Exchange Online and are not a fallback.
-- **Auth: MSAL.js with Nested App Authentication (NAA)** plus an Entra ID app
-  registration with delegated `Calendars.Read`. The exact redirect URI scheme
-  and the manifest settings are taken from Microsoft Learn ("Nested app
-  authentication in Office Add-ins") during the spike, not from memory.
-- **Graph request rules:**
-  - `calendarView` (not `/events`) so recurring series arrive as instances.
-  - Page through `@odata.nextLink`; `$top` raised; `$select` limited to
-    `subject,body,start,end,isAllDay,isCancelled,categories,showAs,responseStatus,attendees,organizer`.
-  - Header `Prefer: outlook.timezone="W. Europe Standard Time"`. Otherwise
-    times arrive in UTC and appointments near midnight slip into the wrong
-    month.
-  - Header `Prefer: outlook.body-content-type="text"`. The body text is part
-    of the report.
-- **Domain logic as pure functions** (filter, duration, grouping, summing,
-  formatting) in `src/report/`, independent of Office.js and Graph, unit-tested
-  with Vitest. Office/Graph code stays a thin adapter.
-- **Customer filter, default until clarified:** configurable match on Outlook
-  category and/or a subject keyword, applied client-side after fetching.
-- **Business rules (defaults, confirm in review):** duration = `end - start`;
-  exclude `isCancelled`; exclude appointments the user declined; exclude
-  all-day appointments; include `showAs = free` items.
-- **XLSX library:** not the npm `xlsx` package (stuck at 0.18.x with known
-  CVEs). Use the SheetJS build from the SheetJS CDN tarball or `exceljs`.
-  Decide in Task 8 by bundle size and licence.
-- **Export order by risk:** CSV (no dependency) → clipboard text → XLSX.
-  `<a download>` blob downloads and `navigator.clipboard.writeText` may be
-  blocked inside the add-in iframe on some hosts. The spike checks both.
+- **VBA macro in classic Outlook, nothing but Office.** Decided 2026-10-19
+  after the web add-in prototype (kept in git history up to `2160434`). The
+  user wants no web page, no hosting and no installation beyond Office. New
+  Outlook cannot run VBA, so Officium targets classic Outlook only.
+- **Development and test happen on different machines.** This PC has only new
+  Outlook and no Excel. Code is written here; the user imports and runs it on
+  a PC with classic Outlook. Every task therefore ends with a manual check by
+  the user, and the self-test macro is the main safety net.
+- **Source layout:** plain-text VBA modules in `vba/`, imported via the VBA
+  editor (File > Import). `.bas` files are stored with CRLF (`.gitattributes`).
+  No `.frm`/`.frx`: a UserForm needs the binary `.frx`, which cannot be
+  produced or reviewed here.
+  - `OfficiumCore.bas`: pure logic (period presets, customer match, business
+    rules, grouping, totals, CSV and text formatting). No Outlook objects, so
+    the self-test can cover it completely.
+  - `Officium.bas`: entry macro `OfficiumReport`, dialogs, calendar access,
+    file/clipboard/Excel output.
+  - `OfficiumTests.bas`: `OfficiumSelfTest`, assertions over the core module,
+    result in a message box and the Immediate window.
+- **Dialogs via `InputBox`/`MsgBox`.** Period (preset or free range), customer,
+  grouping. A UserForm can follow later if the dialog chain proves clumsy.
+- **Calendar access via the Outlook object model:**
+  - `Items.Sort "[Start]"`, then `IncludeRecurrences = True`, then `Restrict`
+    with a closed range (`[Start] < to AND [End] > from`). Any other order
+    returns series only once or loops endlessly.
+  - Dates in the `Restrict` string use `Format(d, "ddddd h:nn AMPM")`, which
+    follows the system's short date format as Outlook expects.
+  - Times come in local time; no timezone handling needed.
+- **Customer match, default until clarified:** an appointment belongs to the
+  customer if one of its categories equals the input (case-insensitive) or the
+  subject contains it. `Categories` is split on both `,` and `;` because the
+  separator follows the Windows list separator.
+- **Business rules (defaults, confirm in review):** duration = `End - Start`
+  in minutes; skip cancelled meetings (`MeetingStatus` 5 and 7); skip declined
+  ones (`ResponseStatus` 4); skip all-day appointments; include free/tentative.
+- **Exports:**
+  - CSV: semicolon-separated, UTF-8 with BOM via `ADODB.Stream` (part of
+    Windows), written next to the user's documents, opened afterwards.
+  - Clipboard: Win32 clipboard API via `Declare PtrSafe`. `MSForms.DataObject`
+    is avoided because it pastes `??` on Windows 8 and later while Explorer
+    windows are open.
+  - Excel: late-bound `CreateObject("Excel.Application")`, only if it
+    succeeds; durations as Excel time values so `=SUM()` works.
+- **Start button:** the user adds `OfficiumReport` to the ribbon or the Quick
+  Access Toolbar (File > Options > Customize Ribbon > Macros). Signed with a
+  certificate from `SelfCert.exe` (ships with Office) so macro security can
+  stay at "signed macros only".
 
 ## Task List
 
 Tasks live in `tasks/todo.md`.
 
 ### Phase 0: Repository
-- [x] Task 0: Own git repository and scaffold
+- [x] Task 0: Own git repository (web add-in prototype archived in history)
 
-### Phase 1: Feasibility spike (highest risk first)
-- [ ] Task 1: Sideload task pane from WSL2 dev server into new Outlook
-- [ ] Task 2: NAA sign-in and one `calendarView` call
-- [ ] Task 3: Probe blob download and clipboard in the add-in host
+### Phase 1: Feasibility (highest risk first)
+- [ ] Task 1: Read appointments of a period including recurring series
+- [ ] Task 2: Self-test macro, signing and ribbon button
 
-### Checkpoint A: Spike
-- [ ] Token obtained, real appointments displayed, export paths known
-- [ ] Human review: go/no-go for the Graph + NAA approach
+### Checkpoint A
+- [ ] Real appointments listed, series correct, self-test runs on the user's PC
+- [ ] Human review: go for the dialog and report phase
 
 ### Phase 2: Core report
-- [ ] Task 4: Date range selection with paged, timezone-correct fetch
-- [ ] Task 5: Customer filter and business rules
-- [ ] Task 6: Grouping by month/quarter with totals
+- [ ] Task 3: Customer filter and business rules
+- [ ] Task 4: Grouping by month/quarter with totals
+- [ ] Task 5: Dialog chain and on-screen summary
 
-### Checkpoint B: Core
+### Checkpoint B
 - [ ] Report for a real customer and month matches a manual count
-- [ ] Vitest suite green
+- [ ] Self-test green
 
 ### Phase 3: Export
-- [ ] Task 7: CSV export
-- [ ] Task 8: Clipboard text summary
-- [ ] Task 9: XLSX export
+- [ ] Task 6: CSV export
+- [ ] Task 7: Clipboard text
+- [ ] Task 8: Optional Excel output
 
-### Checkpoint C: Complete
-- [ ] All three exports verified with a real report
-- [ ] README describes app registration, sideloading and usage
+### Checkpoint C
+- [ ] All exports verified with a real report
+- [ ] README describes import, signing, button and usage
 
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Tenant admin consent for `Calendars.Read` not granted | High | Clarify with M365 admin before Task 2; spike stops here if refused |
-| NAA unsupported or configured differently in the target client | High | Task 2 is a spike; check the Microsoft Learn support matrix first |
-| WSL2 dev certificate not trusted by Outlook/WebView2 on Windows | Med | Task 1 installs the dev CA into the Windows store and proves it |
-| Download/clipboard blocked in add-in iframe | Med | Task 3 probes; fallback `Office.context.ui.displayDialogAsync` or a text area to copy from |
-| Timezone/DST errors at month boundaries | Med | `Prefer: outlook.timezone` header plus unit tests around DST and month ends |
-| Recurring series counted wrongly | Med | Use `calendarView`; test with a real recurring series |
-| Large ranges (a year) hit Graph throttling | Low | Paging, `$select`, honour `Retry-After` on 429 |
+| Code cannot be run here; slow feedback loop | High | Small tasks, pure core with self-test, precise check steps per task |
+| Recurring series missing or endless loop | High | Task 1 first, with a test series in the calendar |
+| `Restrict` date string misread under German locale | Med | `ddddd h:nn AMPM` format; Task 1 checks a range across month end |
+| Macro security blocks unsigned code | Med | SelfCert signing in Task 2, documented in README |
+| Organisation policy disables VBA in Outlook entirely | High | Checked in Task 1 on the target PC; if so, stop and rethink |
+| Large bodies or many appointments make Excel output slow | Low | Write a 2D array to the sheet in one assignment |
 
 ## Open Questions
 
-- Customer assignment: category, subject keyword, attendee domain, or a mix?
-  (Default: category or keyword, configurable.)
+- Customer assignment: category, subject keyword, or both? (Default: both.)
 - All-day appointments: exclude, or count as a fixed number of hours?
-- Count declined / tentative / `showAs = free` appointments?
-- Ticket key for branch names and commit prefixes (repo: github.com/Gitsko/officium, private, signed + DCO)?
-- Who registers the Entra app and grants consent (own tenant or Netresearch)?
-- Should filter presets per customer be saved (roaming settings) in v1?
+- Count tentative / free appointments?
+- Should the body text be shortened (first line only) in the clipboard text?

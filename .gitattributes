@@ -1,2 +1,4 @@
 * text=auto eol=lf
-*.png binary
+# The VBA editor imports modules reliably only with CRLF line endings.
+*.bas text eol=crlf
+*.cls text eol=crlf

@@ -1,220 +1,183 @@
 # Todo: Officium
 
-## Task 0: Own git repository and scaffold
+All manual checks run on the user's PC with classic Outlook. "Self-test" means
+running the macro `OfficiumSelfTest` there.
 
-**Description:** `officium` currently sits inside the home dotfiles repo.
-Initialise its own repository, scaffold a TypeScript Outlook task-pane add-in
-with the current Yeoman Office generator (package name `officium`, display name "Officium"), and add Vitest.
+## Task 0: Own git repository
 
-**Acceptance criteria:**
-- [x] `git -C ~/projects/officium rev-parse --show-toplevel` points to the project, not `~`
-- [x] `npm run build` succeeds; `npx vitest run` runs (manifest identity test); `npm run typecheck` clean
-- [x] Remote, identity and signing set up according to the chosen repo target
-
-**Verification:**
-- [x] Build: `npm run build`
-- [x] Tests: `npx vitest run`
-
-**Dependencies:** None (repo target from Open Questions)
-
-**Files likely touched:** `package.json`, `manifest.json`, `src/**`, `tests/manifest.test.ts`, `tsconfig.json`, `.gitignore`
-
-**Notes:** Scaffolded with `yo office taskpane Officium outlook json --ts` (unified manifest). The `nested-app-auth` template was rejected: it is from 2024 and only targets Excel/Word/PowerPoint with an XML manifest. MSAL/NAA is added in Task 2.
-
-**Estimated scope:** M
-
-## Task 1: Sideload task pane from WSL2 dev server into new Outlook
-
-**Description:** Run the dev server in WSL2 and sideload the add-in into the new
-Outlook on Windows (and OWA). The dev certificate must be trusted on the
-Windows side.
+**Description:** Own repository at `github.com/Gitsko/officium`. The web add-in
+prototype (Office.js, unified manifest) was built first and removed when the
+project switched to VBA; it stays in history up to `2160434`.
 
 **Acceptance criteria:**
-- [ ] Task pane opens in new Outlook from a calendar context and shows "Hello"
-- [ ] Same in Outlook on the web
-- [ ] Steps (cert trust, sideload) documented in README
+- [x] Repository, identity and signing set up
+- [x] Web add-in code removed from `main`
+
+**Estimated scope:** S
+
+## Task 1: Read appointments of a period including recurring series
+
+**Description:** Macro `OfficiumListAppointments` asks for a from/to date and
+writes every appointment in that range (start, end, minutes, subject,
+categories) to the Immediate window, followed by the count.
+
+**Acceptance criteria:**
+- [ ] A recurring series shows up once per occurrence in the range
+- [ ] An appointment on the last evening of a month is included, one on the
+      first morning of the next month is not
+- [ ] Count matches the Outlook calendar view for the same week
 
 **Verification:**
-- [ ] Manual check: screenshot of the open task pane in both clients
+- [ ] Manual check: user creates a test series, runs the macro, compares with the calendar
+- [ ] Manual check: VBA is allowed at all on the target PC (no policy block)
 
 **Dependencies:** Task 0
 
-**Files likely touched:** `manifest.*`, `README.md`
+**Files likely touched:** `vba/Officium.bas`, `README.md`
 
 **Estimated scope:** S
 
-## Task 2: NAA sign-in and one calendarView call
+## Task 2: Self-test macro, signing and ribbon button
 
-**Description:** Register an Entra ID app (delegated `Calendars.Read`),
-configure NAA per Microsoft Learn, acquire a token silently (popup fallback)
-and render the subjects of the next seven days.
+**Description:** `OfficiumSelfTest` with a tiny assertion helper and one test
+for the period presets (this month, last month, this quarter, last quarter).
+README explains import, SelfCert signing and the ribbon button.
 
 **Acceptance criteria:**
-- [ ] Token acquired without a separate login in new Outlook
-- [ ] Real appointments of the next 7 days listed in the task pane
-- [ ] App registration steps (redirect URI, permissions, consent) in README
+- [ ] Self-test reports passed/failed counts; a deliberately broken assertion shows as failed
+- [ ] Macro runs from a ribbon button with macro security at "signed macros only"
 
 **Verification:**
-- [ ] Manual check: list matches the Outlook calendar view
+- [ ] Manual check: self-test output, screenshot of the button
 
 **Dependencies:** Task 1
 
-**Files likely touched:** `src/auth/msal.ts`, `src/graph/client.ts`, `src/taskpane/taskpane.ts`, `manifest.*`, `README.md`
+**Files likely touched:** `vba/OfficiumCore.bas`, `vba/OfficiumTests.bas`, `README.md`
 
-**Estimated scope:** M
+**Estimated scope:** S
 
-## Task 3: Probe blob download and clipboard in the add-in host
+## Checkpoint A
+- [ ] Real appointments listed, series correct, self-test runs
+- [ ] Human review before Phase 2
 
-**Description:** Two throwaway buttons: download a tiny CSV blob, copy a string
-to the clipboard. Record which works in new Outlook and OWA and pick the
-fallback where needed.
+## Task 3: Customer filter and business rules
 
-**Acceptance criteria:**
-- [ ] Result per client recorded in `tasks/plan.md` (Architecture Decisions)
-- [ ] Probe code removed afterwards
-
-**Verification:**
-- [ ] Manual check in both clients
-
-**Dependencies:** Task 1
-
-**Files likely touched:** `src/taskpane/taskpane.ts`, `tasks/plan.md`
-
-**Estimated scope:** XS
-
-## Checkpoint A: Spike
-- [ ] Token obtained, real data visible, export paths known
-- [ ] Human review: go/no-go before Phase 2
-
-## Task 4: Date range selection with paged, timezone-correct fetch
-
-**Description:** From/to date inputs (presets: this month, last month, this
-quarter). Fetch all instances via `calendarView` with paging, `$select`, the
-timezone and text-body `Prefer` headers. Map to an internal `Appointment` type.
+**Description:** Pure functions: does an appointment (subject, categories,
+all-day flag, meeting and response status) belong to the customer and count?
 
 **Acceptance criteria:**
-- [ ] A full month with >50 appointments loads completely (paging works)
-- [ ] An appointment at 23:30 on the last day of the month stays in that month
-- [ ] Recurring series appear as individual instances
+- [ ] Match by category (case-insensitive, `,` or `;` separated) or subject substring
+- [ ] Cancelled, declined and all-day appointments are skipped
 
 **Verification:**
-- [ ] Tests: `npx vitest run` (mapping, paging with mocked fetch responses)
-- [ ] Manual check: count equals Outlook calendar for the same month
+- [ ] Self-test green with cases for each rule
 
 **Dependencies:** Checkpoint A
 
-**Files likely touched:** `src/graph/calendarView.ts`, `src/report/types.ts`, `src/taskpane/*`, `tests/graph/*.test.ts`
+**Files likely touched:** `vba/OfficiumCore.bas`, `vba/OfficiumTests.bas`
 
-**Estimated scope:** M
+**Estimated scope:** S
 
-## Task 5: Customer filter and business rules
+## Task 4: Grouping by month/quarter with totals
 
-**Description:** Pure filter function: match category and/or subject keyword;
-exclude cancelled, declined and all-day items (per resolved Open Questions).
-Category dropdown filled from `/me/outlook/masterCategories`.
+**Description:** Group keys (`2026-10`, `2026-Q4`), subtotal minutes per group
+and a grand total, formatted as hours:minutes.
 
 **Acceptance criteria:**
-- [ ] Filter by category and by keyword works, also combined
-- [ ] Cancelled and declined appointments are excluded
-- [ ] Table shows date, start, end, duration, subject, body text
+- [ ] Ranges across a year boundary group correctly (Q4/2026, Q1/2027)
+- [ ] Totals above 24 hours are shown as e.g. `37:30`, not wrapped
 
 **Verification:**
-- [ ] Tests: `npx vitest run tests/report/filter.test.ts`
-- [ ] Manual check with a real customer category
+- [ ] Self-test green
+
+**Dependencies:** Task 3
+
+**Files likely touched:** `vba/OfficiumCore.bas`, `vba/OfficiumTests.bas`
+
+**Estimated scope:** S
+
+## Task 5: Dialog chain and on-screen summary
+
+**Description:** `OfficiumReport` asks for period (preset or free range),
+customer and grouping, reads the calendar, applies Tasks 3 and 4 and shows
+the totals per group in a message box.
+
+**Acceptance criteria:**
+- [ ] Cancel at any prompt ends the macro without an error
+- [ ] Invalid dates are rejected with a clear message
+- [ ] Totals match a manual count for one real customer and month
+
+**Verification:**
+- [ ] Manual check on the user's PC
 
 **Dependencies:** Task 4
 
-**Files likely touched:** `src/report/filter.ts`, `src/taskpane/*`, `tests/report/filter.test.ts`
+**Files likely touched:** `vba/Officium.bas`, `README.md`
 
-**Estimated scope:** S
+**Estimated scope:** M
 
-## Task 6: Grouping by month/quarter with totals
-
-**Description:** Pure functions to group by none/month/quarter and sum
-durations per group and overall. Render group headers with subtotals.
-
-**Acceptance criteria:**
-- [ ] Subtotals per month and quarter plus grand total in hours:minutes
-- [ ] Ranges spanning year boundaries group correctly (Q4/2026, Q1/2027)
-- [ ] DST change weekends produce correct durations
-
-**Verification:**
-- [ ] Tests: `npx vitest run tests/report/group.test.ts`
-- [ ] Manual check: one real month matches a manual sum
-
-**Dependencies:** Task 5
-
-**Files likely touched:** `src/report/group.ts`, `src/taskpane/*`, `tests/report/group.test.ts`
-
-**Estimated scope:** S
-
-## Checkpoint B: Core
-- [ ] Real report for one customer/month matches a manual count
-- [ ] `npx vitest run` green, `npm run build` clean
+## Checkpoint B
+- [ ] Real report matches a manual count
+- [ ] Self-test green
 - [ ] Human review of the business rules
 
-## Task 7: CSV export
+## Task 6: CSV export
 
-**Description:** Serialise the current report (detail rows plus group totals)
-as CSV (semicolon, UTF-8 BOM so Excel shows umlauts) and deliver it via the
-mechanism chosen in Task 3.
+**Description:** Detail rows plus group totals as semicolon-separated CSV,
+UTF-8 with BOM, saved to the documents folder and opened.
 
 **Acceptance criteria:**
-- [ ] File opens in German Excel with correct columns and umlauts
-- [ ] Body text with line breaks and semicolons is quoted correctly
+- [ ] Opens in German Excel with correct columns and umlauts
+- [ ] Body text with line breaks, quotes and semicolons is quoted correctly
 
 **Verification:**
-- [ ] Tests: `npx vitest run tests/export/csv.test.ts`
-- [ ] Manual check: open the exported file in Excel
+- [ ] Self-test green (CSV field quoting)
+- [ ] Manual check: open the file
 
 **Dependencies:** Checkpoint B
 
-**Files likely touched:** `src/export/csv.ts`, `src/taskpane/*`, `tests/export/csv.test.ts`
+**Files likely touched:** `vba/OfficiumCore.bas`, `vba/Officium.bas`, `vba/OfficiumTests.bas`
 
 **Estimated scope:** S
 
-## Task 8: Clipboard text summary
+## Task 7: Clipboard text
 
-**Description:** Plain-text summary (period, customer, per-group totals, one
-line per appointment) copied to the clipboard, ready for invoices or worklogs.
+**Description:** Plain-text summary (period, customer, group totals, one line
+per appointment) on the clipboard via the Win32 API.
 
 **Acceptance criteria:**
-- [ ] Copy works in new Outlook and OWA (or the Task 3 fallback is shown)
-- [ ] Format is stable and readable when pasted into mail or Jira
+- [ ] Pasting into a mail shows umlauts correctly
+- [ ] Works while Explorer windows are open
 
 **Verification:**
-- [ ] Tests: `npx vitest run tests/export/text.test.ts`
+- [ ] Self-test green (text layout)
 - [ ] Manual check: paste into a mail
 
 **Dependencies:** Checkpoint B
 
-**Files likely touched:** `src/export/text.ts`, `src/taskpane/*`, `tests/export/text.test.ts`
+**Files likely touched:** `vba/OfficiumCore.bas`, `vba/Officium.bas`, `vba/OfficiumTests.bas`
 
 **Estimated scope:** S
 
-## Task 9: XLSX export
+## Task 8: Optional Excel output
 
-**Description:** Pick the library (SheetJS CDN build vs. `exceljs`), export
-detail sheet plus summary sheet with durations as Excel time values so sums
-work in Excel.
+**Description:** If `CreateObject("Excel.Application")` succeeds, write the
+report to a new workbook (detail sheet with autofilter, summary sheet) and
+show Excel. Otherwise skip silently and mention the CSV.
 
 **Acceptance criteria:**
-- [ ] Library decision recorded in `tasks/plan.md`
-- [ ] Detail and summary sheet; duration column summable in Excel
-- [ ] Bundle size increase noted
+- [ ] Duration column is summable with `=SUM()`
+- [ ] Without Excel the macro still finishes with CSV and clipboard
 
 **Verification:**
-- [ ] Tests: `npx vitest run tests/export/xlsx.test.ts` (read back the generated workbook)
-- [ ] Build: `npm run build`
-- [ ] Manual check: open in Excel, `=SUM()` over duration works
+- [ ] Manual check on a PC with Excel
 
-**Dependencies:** Task 7
+**Dependencies:** Task 6
 
-**Files likely touched:** `src/export/xlsx.ts`, `package.json`, `src/taskpane/*`, `tests/export/xlsx.test.ts`
+**Files likely touched:** `vba/Officium.bas`
 
-**Estimated scope:** M
+**Estimated scope:** S
 
-## Checkpoint C: Complete
+## Checkpoint C
 - [ ] All acceptance criteria met
-- [ ] README: app registration, sideloading, usage
-- [ ] Ready for review
+- [ ] README: import, signing, button, usage
