@@ -196,6 +196,11 @@ show Excel. Otherwise skip silently and mention the CSV.
 
 **Files likely touched:** `vba/Officium.bas`
 
+**Notes:** Code written; checks pending on a PC with Excel. The summary
+message comes before Excel opens, so it cannot hide behind the Excel window.
+Without Excel, or if filling the workbook fails, the CSV is opened instead.
+The sheet total uses `SUBTOTAL(109, ...)` so it follows the autofilter.
+
 **Estimated scope:** S
 
 ## Checkpoint C

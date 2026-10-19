@@ -31,15 +31,26 @@ Public Sub OfficiumReport()
         MsgBox "Keine passenden Termine." & vbCrLf & vbCrLf & title, vbInformation, "Officium"
         Exit Sub
     End If
-    Dim results As String
-    results = SaveCsv(CsvFileName(customer, fromDate, untilDate), report, True)
+    Dim csvPath As String, results As String, xl As Object
+    csvPath = DocumentsFolder() & "\" & CsvFileName(customer, fromDate, untilDate)
+    results = SaveCsv(csvPath, report)
     If CopyToClipboard(ClipboardText(title, report)) Then
         results = results & vbCrLf & "Bericht als Text in der Zwischenablage."
     Else
         results = results & vbCrLf & "Zwischenablage war belegt, Text nicht kopiert."
     End If
+    Set xl = StartExcel()
+    If Not xl Is Nothing Then results = results & vbCrLf & "Nach OK öffnet sich der Bericht in Excel."
+
+    ' The message comes before Excel opens: shown later it could end up behind
+    ' the Excel window and Outlook would seem to hang.
     MsgBox title & vbCrLf & vbCrLf & TotalsText(report) & vbCrLf & vbCrLf & results, _
         vbInformation, "Officium"
+    If xl Is Nothing Then
+        OpenFile csvPath
+    ElseIf Not ShowInExcel(xl, title, report) Then
+        OpenFile csvPath
+    End If
     Exit Sub
 
 Failed:
@@ -116,25 +127,120 @@ Private Function CopyToClipboard(ByVal content As String) As Boolean
     CloseClipboard
 End Function
 
-' Saves the report as CSV in the documents folder and opens it if asked.
-' Returns a status line for the final message.
-Private Function SaveCsv(ByVal csvName As String, ByVal report As Variant, ByVal openIt As Boolean) As String
-    Dim filePath As String
-    filePath = DocumentsFolder() & "\" & csvName
+' A new, still hidden Excel instance, or Nothing if Excel is not installed.
+Private Function StartExcel() As Object
+    On Error Resume Next
+    Set StartExcel = CreateObject("Excel.Application")
+End Function
+
+' Fills a new workbook in the given Excel and shows it: sheet "Termine" with an
+' autofilter and a total of the visible rows, sheet "Summen" with the totals
+' per group. On an error Excel is closed again and False returned.
+Private Function ShowInExcel(ByVal xl As Object, ByVal title As String, ByVal report As Variant) As Boolean
+    On Error GoTo Failed
+    Dim book As Object, sheet As Object, grid() As Variant, n As Long, r As Long, c As Long
+    Dim headers As Variant
+    n = UBound(report, 1)
+    Set book = xl.Workbooks.Add
+    Set sheet = book.Worksheets(1)
+    sheet.Name = "Termine"
+
+    ' Formats before values: text columns stay text (no date from "2026-10",
+    ' no formula from "=..."), durations keep counting past 24 hours.
+    ' NumberFormat and Formula always take the English codes.
+    sheet.Columns(1).NumberFormat = "dd.mm.yyyy"
+    sheet.Range("B:C").NumberFormat = "hh:mm"
+    sheet.Columns(4).NumberFormat = "[h]:mm"
+    sheet.Range("E:H").NumberFormat = "@"
+
+    headers = Array("Datum", "Beginn", "Ende", "Dauer", "Gruppe", "Betreff", "Kategorien", "Text")
+    ReDim grid(1 To n + 1, 1 To 8)
+    For c = 1 To 8
+        grid(1, c) = headers(c - 1)
+    Next
+    For r = 1 To n
+        grid(r + 1, 1) = DateSerial(Year(report(r, COL_START)), Month(report(r, COL_START)), Day(report(r, COL_START)))
+        grid(r + 1, 2) = TimeSerial(Hour(report(r, COL_START)), Minute(report(r, COL_START)), 0)
+        grid(r + 1, 3) = TimeSerial(Hour(report(r, COL_END)), Minute(report(r, COL_END)), 0)
+        grid(r + 1, 4) = report(r, COL_MINUTES) / 1440
+        grid(r + 1, 5) = report(r, COL_GROUP)
+        grid(r + 1, 6) = report(r, COL_SUBJECT)
+        grid(r + 1, 7) = report(r, COL_CATEGORIES)
+        ' Excel breaks lines at LF only; a cell holds at most 32767 characters.
+        grid(r + 1, 8) = Left$(Replace(TrimText(report(r, COL_BODY)), vbCr, ""), 32000)
+    Next
+    ' One assignment for all cells; cell by cell is slow with many appointments.
+    sheet.Range("A1").Resize(n + 1, 8).Value = grid
+    sheet.Range("A1").Resize(1, 8).Font.Bold = True
+    sheet.Range("A1").Resize(n + 1, 8).AutoFilter
+    sheet.Cells(n + 3, 3).Value = "Summe"
+    ' 109 = SUM over the rows the autofilter shows.
+    sheet.Cells(n + 3, 4).Formula = "=SUBTOTAL(109,D2:D" & (n + 1) & ")"
+    sheet.Cells(n + 3, 3).Resize(1, 2).Font.Bold = True
+    sheet.Range("A:G").Columns.AutoFit
+    sheet.Columns(8).ColumnWidth = 80
+    sheet.Columns(8).WrapText = False
+
+    Set sheet = book.Worksheets.Add(After:=sheet)
+    sheet.Name = "Summen"
+    sheet.Columns(1).NumberFormat = "@"
+    sheet.Columns(2).NumberFormat = "[h]:mm"
+    sheet.Cells(1, 1).Value = title
+    sheet.Range("A3:C3").Value = Array("Gruppe", "Dauer", "Minuten")
+    Dim keys() As String, sums() As Long, groups As Long, g As Long, outRow As Long, total As Long
+    groups = SumByGroup(report, keys, sums)
+    outRow = 3
+    For g = 1 To groups
+        total = total + sums(g)
+        If Len(keys(g)) > 0 Then
+            outRow = outRow + 1
+            sheet.Cells(outRow, 1).Value = keys(g)
+            sheet.Cells(outRow, 2).Value = sums(g) / 1440
+            sheet.Cells(outRow, 3).Value = sums(g)
+        End If
+    Next
+    outRow = outRow + 1
+    sheet.Cells(outRow, 1).Value = "Gesamt"
+    sheet.Cells(outRow, 2).Value = total / 1440
+    sheet.Cells(outRow, 3).Value = total
+    sheet.Range("A1,A3:C3").Font.Bold = True
+    sheet.Cells(outRow, 1).Resize(1, 3).Font.Bold = True
+    sheet.Range("A3:C" & outRow).Columns.AutoFit
+
+    book.Worksheets(1).Activate
+    xl.Visible = True
+    ShowInExcel = True
+    Exit Function
+
+Failed:
+    MsgBox "Excel-Fehler: " & Err.Description & vbCrLf & vbCrLf & _
+        "Officium öffnet stattdessen die CSV-Datei.", vbExclamation, "Officium"
+    ' Resume leaves the error handler; inside it On Error Resume Next has no effect.
+    Resume CloseExcel
+CloseExcel:
+    On Error Resume Next
+    xl.DisplayAlerts = False
+    xl.Quit
+End Function
+
+' Saves the report as CSV. Returns a status line for the final message.
+Private Function SaveCsv(ByVal filePath As String, ByVal report As Variant) As String
     On Error GoTo Failed
     SaveUtf8 filePath, CsvText(report)
     SaveCsv = "CSV gespeichert: " & filePath
-    If openIt Then
-        ' Opens the file like a double click; fails quietly if Windows Script Host is blocked.
-        On Error Resume Next
-        CreateObject("WScript.Shell").Run """" & filePath & """"
-    End If
     Exit Function
 
 Failed:
     ' Typically the file of an earlier run is still open in Excel.
     SaveCsv = "CSV nicht gespeichert (" & Err.Description & "): " & filePath
 End Function
+
+' Opens a file like a double click; does nothing if Windows Script Host is
+' blocked or the file is missing.
+Private Sub OpenFile(ByVal filePath As String)
+    On Error Resume Next
+    CreateObject("WScript.Shell").Run """" & filePath & """"
+End Sub
 
 ' Writes text as UTF-8 with byte order mark, which German Excel needs to show
 ' umlauts. ADODB.Stream adds the mark itself.
