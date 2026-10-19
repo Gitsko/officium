@@ -174,6 +174,9 @@ per appointment) on the clipboard via the Win32 API.
 
 **Files likely touched:** `vba/OfficiumCore.bas`, `vba/Officium.bas`, `vba/OfficiumTests.bas`
 
+**Notes:** Code and tests written; checks pending on the user's PC. Only the
+first line of each body goes into the text.
+
 **Estimated scope:** S
 
 ## Task 8: Optional Excel output

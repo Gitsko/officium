@@ -239,3 +239,31 @@ Public Function CsvText(ByVal report As Variant) As String
     Next
     CsvText = lines & "Gesamt;" & FormatMinutes(total) & ";" & total & vbCrLf
 End Function
+
+' First line of a text that is not blank, e.g. the opening line of a body.
+Public Function FirstLine(ByVal fullText As String) As String
+    Dim lines() As String, i As Long
+    lines = Split(Replace(fullText, vbCr, vbLf), vbLf)
+    For i = 0 To UBound(lines)
+        If Len(TrimText(lines(i))) > 0 Then
+            FirstLine = TrimText(lines(i))
+            Exit Function
+        End If
+    Next
+End Function
+
+' Plain-text report to paste into a mail: title, totals, then one line per
+' appointment with the first line of its body.
+Public Function ClipboardText(ByVal title As String, ByVal report As Variant) As String
+    Dim lines As String, r As Long, note As String
+    lines = title & vbCrLf & vbCrLf & TotalsText(report) & vbCrLf & vbCrLf
+    For r = 1 To UBound(report, 1)
+        lines = lines & DateText(report(r, COL_START)) & " " & TimeText(report(r, COL_START)) _
+            & "-" & TimeText(report(r, COL_END)) & vbTab & FormatMinutes(report(r, COL_MINUTES)) & " h" _
+            & vbTab & report(r, COL_SUBJECT)
+        note = FirstLine(report(r, COL_BODY))
+        If Len(note) > 0 Then lines = lines & " - " & note
+        lines = lines & vbCrLf
+    Next
+    ClipboardText = lines
+End Function

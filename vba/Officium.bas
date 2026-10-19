@@ -2,6 +2,18 @@ Attribute VB_Name = "Officium"
 ' Officium - calendar reports for classic Outlook.
 Option Explicit
 
+' Windows clipboard API, declared for 32- and 64-bit Office.
+Private Declare PtrSafe Function OpenClipboard Lib "user32" (ByVal hWndNewOwner As LongPtr) As Long
+Private Declare PtrSafe Function EmptyClipboard Lib "user32" () As Long
+Private Declare PtrSafe Function SetClipboardData Lib "user32" (ByVal wFormat As Long, ByVal hMem As LongPtr) As LongPtr
+Private Declare PtrSafe Function CloseClipboard Lib "user32" () As Long
+Private Declare PtrSafe Function GlobalAlloc Lib "kernel32" (ByVal wFlags As Long, ByVal dwBytes As LongPtr) As LongPtr
+Private Declare PtrSafe Function GlobalLock Lib "kernel32" (ByVal hMem As LongPtr) As LongPtr
+Private Declare PtrSafe Function GlobalUnlock Lib "kernel32" (ByVal hMem As LongPtr) As Long
+Private Declare PtrSafe Function GlobalFree Lib "kernel32" (ByVal hMem As LongPtr) As LongPtr
+Private Declare PtrSafe Sub CopyMemory Lib "kernel32" Alias "RtlMoveMemory" _
+    (ByVal destination As LongPtr, ByVal source As LongPtr, ByVal length As LongPtr)
+
 ' Asks for period, customer and grouping and shows the totals of the matching
 ' appointments of the default calendar.
 Public Sub OfficiumReport()
@@ -21,6 +33,11 @@ Public Sub OfficiumReport()
     End If
     Dim results As String
     results = SaveCsv(CsvFileName(customer, fromDate, untilDate), report, True)
+    If CopyToClipboard(ClipboardText(title, report)) Then
+        results = results & vbCrLf & "Bericht als Text in der Zwischenablage."
+    Else
+        results = results & vbCrLf & "Zwischenablage war belegt, Text nicht kopiert."
+    End If
     MsgBox title & vbCrLf & vbCrLf & TotalsText(report) & vbCrLf & vbCrLf & results, _
         vbInformation, "Officium"
     Exit Sub
@@ -64,6 +81,39 @@ Private Function CollectReport(ByVal fromDate As Date, ByVal untilDate As Date, 
         Next
     Next
     CollectReport = report
+End Function
+
+' Puts Unicode text on the clipboard via the Windows API. MSForms.DataObject
+' is avoided: it pastes "??" while Explorer windows are open.
+' Returns False if another program holds the clipboard.
+Private Function CopyToClipboard(ByVal content As String) As Boolean
+    Const GMEM_MOVEABLE_ZEROINIT As Long = &H42
+    Const CF_UNICODETEXT As Long = 13
+    Dim hMem As LongPtr, pMem As LongPtr
+
+    ' Two extra zero bytes terminate the UTF-16 text.
+    hMem = GlobalAlloc(GMEM_MOVEABLE_ZEROINIT, LenB(content) + 2)
+    If hMem = 0 Then Exit Function
+    pMem = GlobalLock(hMem)
+    If pMem = 0 Then
+        GlobalFree hMem
+        Exit Function
+    End If
+    CopyMemory pMem, StrPtr(content), LenB(content)
+    GlobalUnlock hMem
+
+    If OpenClipboard(0) = 0 Then
+        GlobalFree hMem
+        Exit Function
+    End If
+    EmptyClipboard
+    ' On success the memory belongs to Windows and must not be freed.
+    If SetClipboardData(CF_UNICODETEXT, hMem) = 0 Then
+        GlobalFree hMem
+    Else
+        CopyToClipboard = True
+    End If
+    CloseClipboard
 End Function
 
 ' Saves the report as CSV in the documents folder and opens it if asked.

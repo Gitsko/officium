@@ -16,6 +16,7 @@ Public Sub OfficiumSelfTest()
     TestGrouping
     TestReportTitle
     TestCsv
+    TestClipboardText
 
     Dim summary As String
     summary = passed & " bestanden, " & failed & " fehlgeschlagen"
@@ -129,6 +130,20 @@ Private Sub TestCsv()
     totals = vbCrLf & vbCrLf & "Summe;Dauer;Minuten" & vbCrLf & "2026-10;1:30;90" & vbCrLf & _
         "2026-11;0:45;45" & vbCrLf & "Gesamt;2:15;135" & vbCrLf
     AssertEqual "csv: totals at the end", totals, Right$(csv, Len(totals))
+End Sub
+
+Private Sub TestClipboardText()
+    AssertEqual "first line: skips blank lines", "Agenda", FirstLine(vbCrLf & "  " & vbCrLf & " Agenda " & vbCrLf & "Punkt")
+    AssertEqual "first line: empty body", "", FirstLine("")
+
+    AssertEqual "clipboard text", _
+        "Acme, 01.10.2026 bis 30.11.2026" & vbCrLf & vbCrLf & _
+        "2026-10" & vbTab & "1:30 h" & vbCrLf & _
+        "2026-11" & vbTab & "0:45 h" & vbCrLf & _
+        "Gesamt" & vbTab & "2:15 h (2 Termine)" & vbCrLf & vbCrLf & _
+        "06.10.2026 09:00-10:30" & vbTab & "1:30 h" & vbTab & "Workshop; Planung - Agenda" & vbCrLf & _
+        "02.11.2026 14:00-14:45" & vbTab & "0:45 h" & vbTab & "Call" & vbCrLf, _
+        ClipboardText("Acme, 01.10.2026 bis 30.11.2026", SampleReport())
 End Sub
 
 ' Text with ' turned into ", to keep expected CSV values readable.
