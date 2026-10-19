@@ -3,7 +3,8 @@
 Officium fasst die Kalendertermine eines Kunden für einen Zeitraum zusammen:
 Termine mit Datum, Uhrzeit, Dauer und Text, dazu die Summe pro Monat oder
 Quartal. Den Bericht gibt es als CSV-Datei, als Text zum Einfügen in eine Mail
-und, wenn Excel installiert ist, als Excel-Mappe.
+und, wenn Excel installiert ist, als druckfertige Excel-Mappe, die Sie an Ihren
+Kunden weitergeben können.
 
 Officium ist ein Makro für das klassische Outlook unter Windows (32 oder
 64 Bit). Im neuen Outlook läuft es nicht. Weitere Software braucht es nicht.
@@ -33,8 +34,18 @@ Outlook führt Makros nur aus, wenn sie signiert sind.
    für das Trust Center** > **Makroeinstellungen** die Option
    „Benachrichtigungen für digital signierte Makros, alle anderen Makros sind
    deaktiviert“ wählen.
-4. Outlook neu starten. Beim ersten Start des Makros **Allen Dokumenten von
-   diesem Herausgeber vertrauen** wählen.
+4. Windows-Taste drücken, `certmgr.msc` eingeben und starten. Unter
+   **Eigene Zertifikate** > **Zertifikate** das Zertifikat `Officium` mit
+   gedrückter Strg-Taste nach **Vertrauenswürdige
+   Stammzertifizierungsstellen** > **Zertifikate** ziehen und die Warnung mit
+   **Ja** bestätigen.
+5. Im VBA-Editor die Signatur wie in Schritt 2 noch einmal wählen und
+   speichern.
+6. Outlook ganz schließen und neu starten. Beim ersten Start des Makros
+   **Allen Dokumenten von diesem Herausgeber vertrauen** wählen.
+
+Passiert beim Klick auf den Button nichts, blockiert Outlook das Makro ohne
+Meldung. Dann die Schritte 3 bis 6 prüfen.
 
 Lassen sich die Makroeinstellungen nicht ändern, hat Ihre IT Makros gesperrt.
 Dann muss die IT Officium freigeben.
@@ -55,7 +66,7 @@ Auf den Button klicken. Officium fragt nacheinander:
 
 1. **Zeitraum**: dieser Monat, letzter Monat, dieses Quartal, letztes Quartal
    oder selbst wählen (erster und letzter Tag zählen mit).
-2. **Kunde**: Name einer Outlook-Kategorie oder ein Wort aus dem Betreff.
+2. **Kunde**: ein Name oder Wort aus dem Betreff.
    Der zuletzt verwendete Kunde ist vorgeschlagen. Bleibt das Feld leer, kommen
    alle Termine in den Bericht.
 3. **Gruppierung**: nach Monat, nach Quartal oder keine.
@@ -67,12 +78,16 @@ Excel, ohne Excel die CSV-Datei.
 
 ## Welche Termine zählen
 
-Ein Termin gehört zum Kunden, wenn er dessen Kategorie trägt oder das Wort im
-Betreff steht. Groß- und Kleinschreibung ist egal. Ganztägige Termine,
+Ein Termin gehört zum Kunden, wenn das Wort im Betreff steht. Groß- und
+Kleinschreibung ist egal, Kategorien spielen keine Rolle. Ganztägige Termine,
 abgesagte und abgelehnte Besprechungen zählen nicht. Ein Termin zählt in dem
 Monat, in dem er beginnt.
 
-Gelesen wird nur Ihr eigener Hauptkalender.
+Gelesen werden alle Kalender, die links in der Kalenderansicht stehen, auch
+freigegebene. Fehlt ein freigegebener Kalender, ihn dort einmal anhaken. Steht
+derselbe Termin in mehreren Kalendern, zählt er nur einmal. Die Meldung am Ende
+nennt, wie viele Kalender durchsucht wurden und welche sich nicht lesen
+ließen.
 
 ## Wo der Bericht landet
 
@@ -83,8 +98,19 @@ Gelesen wird nur Ihr eigener Hauptkalender.
   gespeichert, das steht dann in der Meldung.
 - **Zwischenablage**: Mit Strg+V in eine Mail einfügen. Pro Termin steht dort
   die erste Zeile des Termintexts.
-- **Excel**: Blatt „Termine“ mit Filter und Summe, Blatt „Summen“ mit den
-  Monats- oder Quartalssummen. Die Mappe ist noch nicht gespeichert.
+- **Excel**: Das Blatt „Bericht“ ist für Ihren Kunden: Kopf mit Kunde und
+  Zeitraum, alle Termine mit Text, Zwischensummen und Gesamtsumme, fertig für
+  den Druck auf A4 quer. Danach folgt für Sie pro Kalender ein Blatt mit
+  Filter. Vor dem Versand diese Blätter löschen oder nur „Bericht“ als PDF
+  speichern (**Datei** > **Exportieren**). Die Mappe ist noch nicht
+  gespeichert.
+
+## Neue Version einspielen
+
+Im VBA-Editor (Alt+F11) die Module `Officium` und `OfficiumCore` mit
+Rechtsklick **Entfernen** (Export ablehnen), dann die neuen Dateien wie unter
+„Module einfügen“ importieren. Danach die Signatur wie unter „Makro freigeben“,
+Schritt 2, neu wählen, speichern und Outlook neu starten.
 
 ## Entfernen
 

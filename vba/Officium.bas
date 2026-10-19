@@ -15,7 +15,7 @@ Private Declare PtrSafe Sub CopyMemory Lib "kernel32" Alias "RtlMoveMemory" _
     (ByVal destination As LongPtr, ByVal source As LongPtr, ByVal length As LongPtr)
 
 ' Asks for period, customer and grouping and shows the totals of the matching
-' appointments of the default calendar.
+' appointments of all calendars, including shared ones.
 Public Sub OfficiumReport()
     Dim fromDate As Date, untilDate As Date, customer As String, grouping As Long
     If Not AskPeriod(fromDate, untilDate) Then Exit Sub
@@ -24,11 +24,14 @@ Public Sub OfficiumReport()
         "2 = Quartal" & vbCrLf & "3 = keine Gruppierung", 3, ogMonth, grouping) Then Exit Sub
 
     On Error GoTo Failed
-    Dim title As String, report As Variant
+    Dim title As String, report As Variant, calendars As Collection, skipped As String, note As String
     title = ReportTitle(customer, fromDate, untilDate)
-    report = CollectReport(fromDate, untilDate, customer, grouping)
+    Set calendars = AllCalendars()
+    report = CollectReport(calendars, fromDate, untilDate, customer, grouping, skipped)
+    note = CalendarNote(calendars.Count, skipped)
     If IsEmpty(report) Then
-        MsgBox "Keine passenden Termine." & vbCrLf & vbCrLf & title, vbInformation, "Officium"
+        MsgBox "Keine passenden Termine." & vbCrLf & vbCrLf & title & vbCrLf & vbCrLf & note, _
+            vbInformation, "Officium"
         Exit Sub
     End If
     Dim csvPath As String, results As String, xl As Object
@@ -44,11 +47,11 @@ Public Sub OfficiumReport()
 
     ' The message comes before Excel opens: shown later it could end up behind
     ' the Excel window and Outlook would seem to hang.
-    MsgBox title & vbCrLf & vbCrLf & TotalsText(report) & vbCrLf & vbCrLf & results, _
+    MsgBox title & vbCrLf & vbCrLf & TotalsText(report) & vbCrLf & vbCrLf & note & vbCrLf & results, _
         vbInformation, "Officium"
     If xl Is Nothing Then
         OpenFile csvPath
-    ElseIf Not ShowInExcel(xl, title, report) Then
+    ElseIf Not ShowInExcel(xl, customer, fromDate, untilDate, report) Then
         OpenFile csvPath
     End If
     Exit Sub
@@ -58,29 +61,72 @@ Failed:
         Err.Description & " (" & Err.Number & ")", vbCritical, "Officium"
 End Sub
 
-' Report (see COL_* in OfficiumCore) of the appointments that start in
-' [fromDate, untilDate), belong to the customer and count as work.
-' Empty if there are none.
-Private Function CollectReport(ByVal fromDate As Date, ByVal untilDate As Date, _
-                               ByVal customer As String, ByVal grouping As OfficiumGrouping) As Variant
-    Dim found As Outlook.Items, item As Object, matches As New Collection
-    Set found = AppointmentsBetween(fromDate, untilDate)
-    Set item = found.GetFirst
-    Do While Not item Is Nothing
-        If item.Class = olAppointment Then
-            ' Restrict also returns appointments that started before the period;
-            ' they belong to the previous one.
-            If item.Start >= fromDate Then
-                If CountsAsWork(item.AllDayEvent, item.MeetingStatus, item.ResponseStatus) Then
-                    If MatchesCustomer(customer, item.Subject, item.Categories) Then
-                        matches.Add Array(item.Start, item.End, DateDiff("n", item.Start, item.End), _
-                            item.Subject, item.Categories, item.Body, GroupKey(item.Start, grouping))
-                    End If
-                End If
-            End If
+' "Kalender durchsucht: 3." plus the calendars that could not be read.
+Private Function CalendarNote(ByVal searched As Long, ByVal skipped As String) As String
+    CalendarNote = "Kalender durchsucht: " & searched & "."
+    If Len(skipped) > 0 Then CalendarNote = CalendarNote & vbCrLf & "Nicht lesbar: " & skipped
+End Function
+
+' Every calendar the user sees in Outlook, each as Array(folder, name): the
+' ones in the navigation pane of the calendar view, including shared
+' calendars, then the default calendar of each mailbox in the profile.
+' A calendar reached both ways is listed once.
+Private Function AllCalendars() As Collection
+    Dim calendars As New Collection, calModule As Object, grp As Object, nav As Object
+    Dim st As Object, calendarFolder As Object
+    ' Without an Outlook window or with a shared calendar that is gone, single
+    ' steps fail; the calendars reached so far still count.
+    On Error Resume Next
+    Set calModule = Application.ActiveExplorer.NavigationPane.Modules.GetNavigationModule(olModuleCalendar)
+    If Not calModule Is Nothing Then
+        For Each grp In calModule.NavigationGroups
+            For Each nav In grp.NavigationFolders
+                AddCalendar calendars, nav.Folder, nav.DisplayName
+            Next
+        Next
+    End If
+    For Each st In Application.Session.Stores
+        Set calendarFolder = Nothing
+        Set calendarFolder = st.GetDefaultFolder(olFolderCalendar)
+        If Not calendarFolder Is Nothing Then
+            AddCalendar calendars, calendarFolder, calendarFolder.Name & " (" & st.DisplayName & ")"
         End If
-        Set item = found.GetNext
-    Loop
+    Next
+    Set AllCalendars = calendars
+End Function
+
+' Adds a calendar unless it is already listed. Two different calendars with
+' the same name get a number, so they stay apart in the report.
+Private Sub AddCalendar(ByVal calendars As Collection, ByVal calendarFolder As Object, _
+                        ByVal calendarName As String)
+    Dim entry As Variant, uniqueName As String, n As Long
+    On Error Resume Next
+    uniqueName = Trim$(calendarName)
+    n = 1
+    For Each entry In calendars
+        If StrComp(entry(1), uniqueName, vbTextCompare) = 0 Then
+            n = n + 1
+            uniqueName = Trim$(calendarName) & " (" & n & ")"
+        End If
+    Next
+    ' The EntryID as key: a duplicate raises error 457 and is skipped.
+    calendars.Add Array(calendarFolder, uniqueName), calendarFolder.EntryID
+End Sub
+
+' Report (see COL_* in OfficiumCore) of the appointments that start in
+' [fromDate, untilDate), belong to the customer and count as work, from all
+' given calendars. Calendars that fail are listed in skipped. Empty if there
+' are no appointments.
+Private Function CollectReport(ByVal calendars As Collection, ByVal fromDate As Date, ByVal untilDate As Date, _
+                               ByVal customer As String, ByVal grouping As OfficiumGrouping, _
+                               ByRef skipped As String) As Variant
+    Dim entry As Variant, matches As New Collection
+    For Each entry In calendars
+        If Not AddMatches(matches, entry(0), entry(1), fromDate, untilDate, customer, grouping) Then
+            If Len(skipped) > 0 Then skipped = skipped & ", "
+            skipped = skipped & entry(1)
+        End If
+    Next
     If matches.Count = 0 Then Exit Function
 
     Dim report() As Variant, match As Variant, r As Long, c As Long
@@ -91,7 +137,50 @@ Private Function CollectReport(ByVal fromDate As Date, ByVal untilDate As Date, 
             report(r, c) = match(c - 1)
         Next
     Next
-    CollectReport = report
+    CollectReport = SortedWithoutDuplicates(report)
+End Function
+
+' Appends the matching appointments of one calendar to matches. Returns False
+' and appends nothing if the calendar cannot be read, for example a shared
+' calendar without permission.
+Private Function AddMatches(ByVal matches As Collection, ByVal calendarFolder As Object, _
+                            ByVal calendarName As String, ByVal fromDate As Date, ByVal untilDate As Date, _
+                            ByVal customer As String, ByVal grouping As OfficiumGrouping) As Boolean
+    On Error GoTo Failed
+    Dim found As Outlook.Items, item As Object, own As New Collection, match As Variant
+    Set found = AppointmentsBetween(calendarFolder, fromDate, untilDate)
+    Set item = found.GetFirst
+    Do While Not item Is Nothing
+        If item.Class = olAppointment Then
+            ' Restrict also returns appointments that started before the period;
+            ' they belong to the previous one.
+            If item.Start >= fromDate Then
+                If CountsAsWork(item.AllDayEvent, item.MeetingStatus, item.ResponseStatus) Then
+                    If MatchesCustomer(customer, item.Subject) Then
+                        own.Add Array(item.Start, item.End, DateDiff("n", item.Start, item.End), _
+                            item.Subject, ItemText(item, "Categories"), ItemText(item, "Body"), _
+                            GroupKey(item.Start, grouping), _
+                            calendarName)
+                    End If
+                End If
+            End If
+        End If
+        Set item = found.GetNext
+    Loop
+    For Each match In own
+        matches.Add match
+    Next
+    AddMatches = True
+    Exit Function
+
+Failed:
+End Function
+
+' A text property of an appointment, or "" if Outlook refuses it, as for a
+' calendar shared with "free/busy, subject, location" only.
+Private Function ItemText(ByVal item As Object, ByVal propertyName As String) As String
+    On Error Resume Next
+    ItemText = CallByName(item, propertyName, VbGet)
 End Function
 
 ' Puts Unicode text on the clipboard via the Windows API. MSForms.DataObject
@@ -133,17 +222,187 @@ Private Function StartExcel() As Object
     Set StartExcel = CreateObject("Excel.Application")
 End Function
 
-' Fills a new workbook in the given Excel and shows it: sheet "Termine" with an
-' autofilter and a total of the visible rows, sheet "Summen" with the totals
-' per group. On an error Excel is closed again and False returned.
-Private Function ShowInExcel(ByVal xl As Object, ByVal title As String, ByVal report As Variant) As Boolean
+' Fills a new workbook in the given Excel and shows it. Sheet "Bericht" is
+' meant for the customer: appointments by date with their full text, a total
+' per group and overall, ready to print on A4. One sheet per calendar follows
+' for internal checks. On an error Excel is closed again and False returned.
+Private Function ShowInExcel(ByVal xl As Object, ByVal customer As String, ByVal fromDate As Date, _
+                             ByVal untilDate As Date, ByVal report As Variant) As Boolean
     On Error GoTo Failed
-    Dim book As Object, sheet As Object, grid() As Variant, n As Long, r As Long, c As Long
-    Dim headers As Variant
-    n = UBound(report, 1)
-    Set book = xl.Workbooks.Add
+    Dim book As Object, sheet As Object, takenNames As New Collection
+    Set book = xl.Workbooks.Add(-4167)  ' xlWBATWorksheet: a single sheet
     Set sheet = book.Worksheets(1)
-    sheet.Name = "Termine"
+    sheet.Name = SheetName("Bericht", takenNames)
+    FillCustomerSheet sheet, customer, fromDate, untilDate, report
+
+    Dim names() As String, sums() As Long, calendarCount As Long, i As Long
+    calendarCount = SumByColumn(report, COL_CALENDAR, names, sums)
+    For i = 1 To calendarCount
+        Set sheet = book.Worksheets.Add(After:=book.Worksheets(book.Worksheets.Count))
+        sheet.Name = SheetName(names(i), takenNames)
+        FillAppointmentSheet sheet, RowsWhere(report, COL_CALENDAR, names(i))
+    Next
+
+    book.Worksheets(1).Activate
+    xl.Visible = True
+    HideGridlines xl
+    ShowInExcel = True
+    Exit Function
+
+Failed:
+    MsgBox "Excel-Fehler: " & Err.Description & vbCrLf & vbCrLf & _
+        "Officium öffnet stattdessen die CSV-Datei.", vbExclamation, "Officium"
+    ' Resume leaves the error handler; inside it On Error Resume Next has no effect.
+    Resume CloseExcel
+CloseExcel:
+    On Error Resume Next
+    xl.DisplayAlerts = False
+    xl.Quit
+End Function
+
+' The sheet for the customer: title block in rows 1 to 4, the table from
+' row 6. Per group a heading row and a subtotal, at the end the total.
+' Errors go to the caller.
+Private Sub FillCustomerSheet(ByVal sheet As Object, ByVal customer As String, ByVal fromDate As Date, _
+                              ByVal untilDate As Date, ByVal report As Variant)
+    Const HEADER_ROW As Long = 6
+    Const LAST_COL As Long = 6
+    Dim keys() As String, sums() As Long, groups As Long
+    groups = SumByGroup(report, keys, sums)
+
+    ' Rows of the table below the header: appointments, at most a heading and
+    ' a subtotal per group, the total. Unused rows stay empty.
+    Dim grid() As Variant, n As Long, r As Long, firstRow As Long, currentGroup As String
+    Dim headingRows As New Collection, subtotalRows As New Collection
+    ReDim grid(1 To UBound(report, 1) + 2 * groups + 1, 1 To LAST_COL)
+    For r = 1 To UBound(report, 1)
+        If r = 1 Or report(r, COL_GROUP) <> currentGroup Then
+            If r > 1 Then AddSubtotal grid, n, HEADER_ROW, firstRow, currentGroup, subtotalRows
+            currentGroup = report(r, COL_GROUP)
+            If Len(currentGroup) > 0 Then
+                n = n + 1
+                grid(n, 1) = GroupLabel(currentGroup)
+                headingRows.Add HEADER_ROW + n
+            End If
+            firstRow = HEADER_ROW + n + 1
+        End If
+        n = n + 1
+        grid(n, 1) = DateSerial(Year(report(r, COL_START)), Month(report(r, COL_START)), Day(report(r, COL_START)))
+        grid(n, 2) = TimeSerial(Hour(report(r, COL_START)), Minute(report(r, COL_START)), 0)
+        grid(n, 3) = TimeSerial(Hour(report(r, COL_END)), Minute(report(r, COL_END)), 0)
+        grid(n, 4) = report(r, COL_MINUTES) / 1440
+        grid(n, 5) = report(r, COL_SUBJECT)
+        ' Excel breaks lines at LF only; a cell holds at most 32767 characters.
+        grid(n, 6) = Left$(Replace(TrimText(report(r, COL_BODY)), vbCr, ""), 32000)
+    Next
+    AddSubtotal grid, n, HEADER_ROW, firstRow, currentGroup, subtotalRows
+    n = n + 1
+    grid(n, 1) = "Gesamt"
+
+    Dim lastRow As Long, rowNumber As Variant, subtotal As Variant
+    lastRow = HEADER_ROW + n
+    ' Formats before values: labels and texts stay text (Excel would read
+    ' "Oktober 2026" as a date), durations keep counting past 24 hours.
+    sheet.Columns(1).NumberFormat = "dd.mm.yyyy"
+    sheet.Range("B:C").NumberFormat = "hh:mm"
+    sheet.Columns(4).NumberFormat = "[h]:mm"
+    sheet.Range("E:F").NumberFormat = "@"
+    sheet.Range("A1:A4").NumberFormat = "@"
+    For Each rowNumber In headingRows
+        sheet.Cells(rowNumber, 1).NumberFormat = "@"
+    Next
+    For Each subtotal In subtotalRows
+        sheet.Cells(subtotal(0), 1).NumberFormat = "@"
+    Next
+    sheet.Cells(lastRow, 1).NumberFormat = "@"
+
+    sheet.Range("A1").Value = "Leistungsnachweis"
+    sheet.Range("A2").Value = "Kunde: " & CustomerLabel(customer)
+    sheet.Range("A3").Value = "Zeitraum: " & DateText(fromDate) & " bis " & DateText(untilDate - 1)
+    sheet.Range("A4").Value = "Erstellt am: " & DateText(Date)
+    sheet.Range("A" & HEADER_ROW).Resize(1, LAST_COL).Value = _
+        Array("Datum", "Beginn", "Ende", "Dauer", "Betreff", "Beschreibung")
+    ' One assignment for all cells; cell by cell is slow with many appointments.
+    sheet.Range("A" & (HEADER_ROW + 1)).Resize(n, LAST_COL).Value = grid
+    ' Formula takes the English names. SUBTOTAL skips the subtotals above, so
+    ' each appointment counts once in the total.
+    For Each subtotal In subtotalRows
+        sheet.Cells(subtotal(0), 4).Formula = "=SUBTOTAL(9,D" & subtotal(1) & ":D" & (subtotal(0) - 1) & ")"
+    Next
+    sheet.Cells(lastRow, 4).Formula = "=SUBTOTAL(9,D" & (HEADER_ROW + 1) & ":D" & (lastRow - 1) & ")"
+
+    sheet.Range("A1").Font.Size = 16
+    sheet.Range("A1").Font.Bold = True
+    sheet.Columns(1).ColumnWidth = 11
+    sheet.Range("B:C").ColumnWidth = 7
+    sheet.Columns(4).ColumnWidth = 8
+    sheet.Columns(5).ColumnWidth = 35
+    sheet.Columns(6).ColumnWidth = 70
+    With sheet.Range("A" & HEADER_ROW).Resize(1, LAST_COL)
+        .Font.Bold = True
+        .Font.Color = RGB(255, 255, 255)
+        .Interior.Color = RGB(31, 78, 121)
+    End With
+    With sheet.Range("A" & (HEADER_ROW + 1)).Resize(n, LAST_COL)
+        .VerticalAlignment = -4160  ' xlTop
+        .Columns(5).WrapText = True
+        .Columns(6).WrapText = True
+        .Borders(12).LineStyle = 1  ' xlInsideHorizontal, xlContinuous
+        .Borders(12).Color = RGB(217, 217, 217)
+    End With
+    For Each rowNumber In headingRows
+        sheet.Cells(rowNumber, 1).Resize(1, LAST_COL).Interior.Color = RGB(221, 235, 247)
+        sheet.Cells(rowNumber, 1).Font.Bold = True
+    Next
+    For Each subtotal In subtotalRows
+        sheet.Cells(subtotal(0), 1).Resize(1, LAST_COL).Font.Bold = True
+    Next
+    With sheet.Cells(lastRow, 1).Resize(1, LAST_COL)
+        .Font.Bold = True
+        .Borders(8).LineStyle = 1        ' xlEdgeTop
+        .Borders(9).LineStyle = -4119    ' xlEdgeBottom, xlDouble
+    End With
+    sheet.Range("A" & (HEADER_ROW + 1)).Resize(n, LAST_COL).Rows.AutoFit
+    SetUpPage sheet, "$" & HEADER_ROW & ":$" & HEADER_ROW, "A1:F" & lastRow
+End Sub
+
+' Closes a named group in the customer sheet with a row "Summe <group>".
+' subtotalRows gets Array(row, first row of the group) for the formula.
+Private Sub AddSubtotal(ByRef grid() As Variant, ByRef n As Long, ByVal headerRow As Long, _
+                        ByVal firstRow As Long, ByVal groupKeyText As String, ByVal subtotalRows As Collection)
+    If Len(groupKeyText) = 0 Then Exit Sub
+    n = n + 1
+    grid(n, 1) = "Summe " & GroupLabel(groupKeyText)
+    subtotalRows.Add Array(headerRow + n, firstRow)
+End Sub
+
+' A4 landscape, as wide as one page, header row on every page, page numbers.
+' Skipped without a printer, where Excel cannot read the page setup.
+Private Sub SetUpPage(ByVal sheet As Object, ByVal titleRows As String, ByVal area As String)
+    On Error Resume Next
+    With sheet.PageSetup
+        .PrintArea = area
+        .PrintTitleRows = titleRows
+        .Orientation = 2        ' xlLandscape
+        .PaperSize = 9          ' xlPaperA4
+        .Zoom = False
+        .FitToPagesWide = 1
+        .FitToPagesTall = False
+        .CenterFooter = "Seite &P von &N"
+    End With
+End Sub
+
+' Needs the window, so only after the workbook is shown.
+Private Sub HideGridlines(ByVal xl As Object)
+    On Error Resume Next
+    xl.ActiveWindow.DisplayGridlines = False
+End Sub
+
+' An internal sheet with the appointments of one calendar, an autofilter and
+' a total of the visible rows. Errors go to the caller.
+Private Sub FillAppointmentSheet(ByVal sheet As Object, ByVal report As Variant)
+    Dim grid() As Variant, headers As Variant, n As Long, r As Long, c As Long
+    n = UBound(report, 1)
 
     ' Formats before values: text columns stay text (no date from "2026-10",
     ' no formula from "=..."), durations keep counting past 24 hours.
@@ -166,10 +425,8 @@ Private Function ShowInExcel(ByVal xl As Object, ByVal title As String, ByVal re
         grid(r + 1, 5) = report(r, COL_GROUP)
         grid(r + 1, 6) = report(r, COL_SUBJECT)
         grid(r + 1, 7) = report(r, COL_CATEGORIES)
-        ' Excel breaks lines at LF only; a cell holds at most 32767 characters.
         grid(r + 1, 8) = Left$(Replace(TrimText(report(r, COL_BODY)), vbCr, ""), 32000)
     Next
-    ' One assignment for all cells; cell by cell is slow with many appointments.
     sheet.Range("A1").Resize(n + 1, 8).Value = grid
     sheet.Range("A1").Resize(1, 8).Font.Bold = True
     sheet.Range("A1").Resize(n + 1, 8).AutoFilter
@@ -180,48 +437,7 @@ Private Function ShowInExcel(ByVal xl As Object, ByVal title As String, ByVal re
     sheet.Range("A:G").Columns.AutoFit
     sheet.Columns(8).ColumnWidth = 80
     sheet.Columns(8).WrapText = False
-
-    Set sheet = book.Worksheets.Add(After:=sheet)
-    sheet.Name = "Summen"
-    sheet.Columns(1).NumberFormat = "@"
-    sheet.Columns(2).NumberFormat = "[h]:mm"
-    sheet.Cells(1, 1).Value = title
-    sheet.Range("A3:C3").Value = Array("Gruppe", "Dauer", "Minuten")
-    Dim keys() As String, sums() As Long, groups As Long, g As Long, outRow As Long, total As Long
-    groups = SumByGroup(report, keys, sums)
-    outRow = 3
-    For g = 1 To groups
-        total = total + sums(g)
-        If Len(keys(g)) > 0 Then
-            outRow = outRow + 1
-            sheet.Cells(outRow, 1).Value = keys(g)
-            sheet.Cells(outRow, 2).Value = sums(g) / 1440
-            sheet.Cells(outRow, 3).Value = sums(g)
-        End If
-    Next
-    outRow = outRow + 1
-    sheet.Cells(outRow, 1).Value = "Gesamt"
-    sheet.Cells(outRow, 2).Value = total / 1440
-    sheet.Cells(outRow, 3).Value = total
-    sheet.Range("A1,A3:C3").Font.Bold = True
-    sheet.Cells(outRow, 1).Resize(1, 3).Font.Bold = True
-    sheet.Range("A3:C" & outRow).Columns.AutoFit
-
-    book.Worksheets(1).Activate
-    xl.Visible = True
-    ShowInExcel = True
-    Exit Function
-
-Failed:
-    MsgBox "Excel-Fehler: " & Err.Description & vbCrLf & vbCrLf & _
-        "Officium öffnet stattdessen die CSV-Datei.", vbExclamation, "Officium"
-    ' Resume leaves the error handler; inside it On Error Resume Next has no effect.
-    Resume CloseExcel
-CloseExcel:
-    On Error Resume Next
-    xl.DisplayAlerts = False
-    xl.Quit
-End Function
+End Sub
 
 ' Saves the report as CSV. Returns a status line for the final message.
 Private Function SaveCsv(ByVal filePath As String, ByVal report As Variant) As String
@@ -291,7 +507,7 @@ End Function
 ' appointments. False if the user cancels.
 Private Function AskCustomer(ByRef customer As String) As Boolean
     Dim answer As String
-    answer = InputBox("Kunde: Outlook-Kategorie oder Stichwort im Betreff." & vbCrLf & vbCrLf & _
+    answer = InputBox("Kunde: Name oder Stichwort aus dem Betreff." & vbCrLf & vbCrLf & _
         "Leer lassen für alle Termine im Zeitraum.", "Officium", _
         GetSetting("Officium", "Report", "Customer", ""))
     ' Cancel returns a null string, OK with an empty field an empty one.
@@ -327,11 +543,31 @@ Public Sub OfficiumListAppointments()
         Exit Sub
     End If
 
-    Dim found As Outlook.Items
-    Set found = AppointmentsBetween(fromDate, toDate + 1)
-
+    Dim calendars As Collection, entry As Variant, found As Long, total As Long
+    Set calendars = AllCalendars()
     Debug.Print "--- Officium: " & Format(fromDate, "Short Date") & " bis " & Format(toDate, "Short Date") & " ---"
-    Dim item As Object, total As Long
+    For Each entry In calendars
+        Debug.Print "== " & entry(1)
+        found = PrintAppointments(entry(0), fromDate, toDate + 1)
+        If found < 0 Then
+            Debug.Print "nicht lesbar"
+        Else
+            Debug.Print found & " Termine"
+            total = total + found
+        End If
+    Next
+
+    MsgBox total & " Termine in " & calendars.Count & " Kalendern gefunden. Die Liste steht im " & _
+        "Direktfenster (Strg+G im VBA-Editor).", vbInformation, "Officium"
+End Sub
+
+' Prints the appointments of one calendar that overlap [fromTime, toTime) and
+' returns their number, or -1 if the calendar cannot be read.
+Private Function PrintAppointments(ByVal calendarFolder As Object, ByVal fromTime As Date, _
+                                   ByVal toTime As Date) As Long
+    On Error GoTo Failed
+    Dim found As Outlook.Items, item As Object, total As Long
+    Set found = AppointmentsBetween(calendarFolder, fromTime, toTime)
     Set item = found.GetFirst
     Do While Not item Is Nothing
         If item.Class = olAppointment Then
@@ -343,19 +579,21 @@ Public Sub OfficiumListAppointments()
         End If
         Set item = found.GetNext
     Loop
-    Debug.Print total & " Termine"
+    PrintAppointments = total
+    Exit Function
 
-    MsgBox total & " Termine gefunden. Die Liste steht im Direktfenster (Strg+G im VBA-Editor).", _
-        vbInformation, "Officium"
-End Sub
+Failed:
+    PrintAppointments = -1
+End Function
 
-' Appointments of the default calendar that overlap [fromTime, toTime),
+' Appointments of a calendar that overlap [fromTime, toTime),
 ' with recurring series expanded into single occurrences.
 ' Count is meaningless on the result while recurrences are included:
 ' iterate with GetFirst/GetNext.
-Private Function AppointmentsBetween(ByVal fromTime As Date, ByVal toTime As Date) As Outlook.Items
+Private Function AppointmentsBetween(ByVal calendarFolder As Object, ByVal fromTime As Date, _
+                                     ByVal toTime As Date) As Outlook.Items
     Dim all As Outlook.Items
-    Set all = Application.Session.GetDefaultFolder(olFolderCalendar).Items
+    Set all = calendarFolder.Items
     ' Sort before IncludeRecurrences, otherwise series are returned only once.
     all.Sort "[Start]"
     all.IncludeRecurrences = True

@@ -14,6 +14,7 @@ Public Sub OfficiumSelfTest()
     TestMatchesCustomer
     TestCountsAsWork
     TestGrouping
+    TestCalendars
     TestReportTitle
     TestCsv
     TestClipboardText
@@ -57,13 +58,10 @@ Private Sub TestPeriodRange()
 End Sub
 
 Private Sub TestMatchesCustomer()
-    AssertEqual "customer: category", True, MatchesCustomer("Acme", "Workshop", "Acme")
-    AssertEqual "customer: category ignores case, ';' list", True, MatchesCustomer("acme", "Workshop", "Intern; ACME")
-    AssertEqual "customer: category in ',' list", True, MatchesCustomer("Acme", "Workshop", "Intern, Acme")
-    AssertEqual "customer: category must match whole", False, MatchesCustomer("Acme", "Workshop", "Acme Corp")
-    AssertEqual "customer: subject contains it", True, MatchesCustomer("Acme", "Call mit ACME GmbH", "")
-    AssertEqual "customer: no match", False, MatchesCustomer("Acme", "Workshop", "Intern")
-    AssertEqual "customer: empty input matches all", True, MatchesCustomer(" ", "Workshop", "")
+    AssertEqual "customer: subject contains it, ignoring case", True, MatchesCustomer("Acme", "Call mit ACME GmbH")
+    AssertEqual "customer: input trimmed", True, MatchesCustomer(" Acme ", "Acme: Workshop")
+    AssertEqual "customer: no match", False, MatchesCustomer("Acme", "Workshop")
+    AssertEqual "customer: empty input matches all", True, MatchesCustomer(" ", "Workshop")
 End Sub
 
 ' Meeting status 1 = meeting, 3 = received; response 2 = tentative, 3 = accepted.
@@ -83,6 +81,9 @@ Private Sub TestGrouping()
     AssertEqual "group: quarter on new year's eve", "2026-Q4", GroupKey(#12/31/2026 11:30:00 PM#, ogQuarter)
     AssertEqual "group: quarter after new year", "2027-Q1", GroupKey(#1/1/2027#, ogQuarter)
     AssertEqual "group: none", "", GroupKey(#10/19/2026#, ogNone)
+    AssertEqual "group label: month", "März 2027", GroupLabel("2027-03")
+    AssertEqual "group label: quarter", "4. Quartal 2026", GroupLabel("2026-Q4")
+    AssertEqual "group label: none", "", GroupLabel("")
 
     AssertEqual "minutes: below one hour", "0:45", FormatMinutes(45)
     AssertEqual "minutes: above 24 hours", "37:30", FormatMinutes(2250)
@@ -99,6 +100,43 @@ Private Sub TestGrouping()
         "Gesamt" & vbTab & "38:30 h (2 Termine)", _
         TotalsText(ReportOf("2026-10", 2250, "2026-11", 60))
     AssertEqual "totals: without grouping", "Gesamt" & vbTab & "0:45 h (1 Termin)", TotalsText(ReportOf("", 45))
+End Sub
+
+Private Sub TestCalendars()
+    Dim names() As String, sums() As Long, part As Variant, taken As New Collection
+    AssertEqual "calendars: count", 2, SumByColumn(SampleReport(), COL_CALENDAR, names, sums)
+    AssertEqual "calendars: first", "Kalender", names(1)
+    AssertEqual "calendars: second total", 45, sums(2)
+
+    part = RowsWhere(SampleReport(), COL_CALENDAR, "Kalender - Max")
+    AssertEqual "rows where: one row", 1, UBound(part, 1)
+    AssertEqual "rows where: keeps the columns", "Call", part(1, COL_SUBJECT)
+    AssertEqual "rows where: none", True, IsEmpty(RowsWhere(SampleReport(), COL_CALENDAR, "Fremd"))
+
+    AssertEqual "sheet name: free", "Summen", SheetName("Summen", taken)
+    AssertEqual "sheet name: forbidden characters", "Kalender- Team-Projekt", SheetName("Kalender: Team/Projekt", taken)
+    AssertEqual "sheet name: taken ignoring case", "summen (2)", SheetName("summen", taken)
+    AssertEqual "sheet name: at most 31 characters", "Kalender - Maximilian Musterman", _
+        SheetName("Kalender - Maximilian Mustermann", taken)
+    AssertEqual "sheet name: shortened when taken", "Kalender - Maximilian Muste (2)", _
+        SheetName("Kalender - Maximilian Mustermann", taken)
+    AssertEqual "sheet name: blank", "Kalender", SheetName(" ", taken)
+
+    ' Rows: the November call of SampleReport, the same call from a shared
+    ' calendar, then the October workshop.
+    Dim mixed() As Variant, sample As Variant, c As Long, merged As Variant
+    sample = SampleReport()
+    ReDim mixed(1 To 3, 1 To COL_COUNT)
+    For c = 1 To COL_COUNT
+        mixed(1, c) = sample(2, c)
+        mixed(2, c) = sample(2, c)
+        mixed(3, c) = sample(1, c)
+    Next
+    mixed(2, COL_CALENDAR) = "Kalender - Team"
+    merged = SortedWithoutDuplicates(mixed)
+    AssertEqual "merged: duplicate dropped", 2, UBound(merged, 1)
+    AssertEqual "merged: sorted by start", "Workshop; Planung", merged(1, COL_SUBJECT)
+    AssertEqual "merged: first calendar kept", "Kalender - Max", merged(2, COL_CALENDAR)
 End Sub
 
 Private Sub TestReportTitle()
@@ -121,12 +159,12 @@ Private Sub TestCsv()
 
     Dim csv As String, totals As String
     csv = CsvText(SampleReport())
-    AssertEqual "csv: header first", 1, InStr(csv, "Datum;Beginn;Ende;Dauer;Minuten;Gruppe;Betreff;Kategorien;Text" & vbCrLf)
+    AssertEqual "csv: header first", 1, InStr(csv, "Datum;Beginn;Ende;Dauer;Minuten;Gruppe;Kalender;Betreff;Kategorien;Text" & vbCrLf)
     AssertEqual "csv: row with quoted fields", True, InStr(csv, vbCrLf & _
-        "06.10.2026;09:00;10:30;1:30;90;2026-10;" & Quoted("'Workshop; Planung'") & ";Acme;" & _
+        "06.10.2026;09:00;10:30;1:30;90;2026-10;Kalender;" & Quoted("'Workshop; Planung'") & ";Acme;" & _
         Quoted("'Agenda" & vbCrLf & "Punkt ''A'''") & vbCrLf) > 0
     AssertEqual "csv: plain row", True, InStr(csv, vbCrLf & _
-        "02.11.2026;14:00;14:45;0:45;45;2026-11;Call;Acme, Intern;" & vbCrLf) > 0
+        "02.11.2026;14:00;14:45;0:45;45;2026-11;Kalender - Max;Call;Acme, Intern;" & vbCrLf) > 0
     totals = vbCrLf & vbCrLf & "Summe;Dauer;Minuten" & vbCrLf & "2026-10;1:30;90" & vbCrLf & _
         "2026-11;0:45;45" & vbCrLf & "Gesamt;2:15;135" & vbCrLf
     AssertEqual "csv: totals at the end", totals, Right$(csv, Len(totals))
@@ -151,7 +189,8 @@ Private Function Quoted(ByVal fieldText As String) As String
     Quoted = Replace(fieldText, "'", """")
 End Function
 
-' Two appointments in October and November with every column filled.
+' Two appointments in October and November from two calendars, with every
+' column filled.
 Private Function SampleReport() As Variant
     Dim report() As Variant
     ReDim report(1 To 2, 1 To COL_COUNT)
@@ -162,6 +201,7 @@ Private Function SampleReport() As Variant
     report(1, COL_CATEGORIES) = "Acme"
     report(1, COL_BODY) = "Agenda" & vbCrLf & "Punkt ""A""" & vbCrLf & vbCrLf
     report(1, COL_GROUP) = "2026-10"
+    report(1, COL_CALENDAR) = "Kalender"
     report(2, COL_START) = #11/2/2026 2:00:00 PM#
     report(2, COL_END) = #11/2/2026 2:45:00 PM#
     report(2, COL_MINUTES) = 45
@@ -169,6 +209,7 @@ Private Function SampleReport() As Variant
     report(2, COL_CATEGORIES) = "Acme, Intern"
     report(2, COL_BODY) = ""
     report(2, COL_GROUP) = "2026-11"
+    report(2, COL_CALENDAR) = "Kalender - Max"
     SampleReport = report
 End Function
 

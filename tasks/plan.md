@@ -46,10 +46,14 @@ mail sending).
     quoted `h:nn AMPM` is ambiguous on German systems, which have no AM/PM
     designators.
   - Times come in local time; no timezone handling needed.
-- **Customer match, default until clarified:** an appointment belongs to the
-  customer if one of its categories equals the input (case-insensitive) or the
-  subject contains it. `Categories` is split on both `,` and `;` because the
-  separator follows the Windows list separator.
+- **Customer match (confirmed by the user):** an appointment belongs to the
+  customer if its subject contains the input, ignoring case. Categories do not
+  count.
+- **Calendars:** every calendar in the navigation pane of the calendar view,
+  shared ones included, plus the default calendar of each mailbox in the
+  profile; deduplicated by `EntryID`. A calendar that cannot be read is skipped
+  and named in the final message. An appointment with the same start, end and
+  subject in several calendars counts once, for the calendar listed first.
 - **Business rules (defaults, confirm in review):** duration = `End - Start`
   in minutes; skip cancelled meetings (`MeetingStatus` 5 and 7); skip declined
   ones (`ResponseStatus` 4); skip all-day appointments; include free/tentative.
@@ -60,7 +64,9 @@ mail sending).
     is avoided because it pastes `??` on Windows 8 and later while Explorer
     windows are open.
   - Excel: late-bound `CreateObject("Excel.Application")`, only if it
-    succeeds; durations as Excel time values so `=SUM()` works.
+    succeeds; durations as Excel time values so `=SUM()` works. Sheet
+    "Bericht" is print-ready for the customer (A4 landscape, subtotal per
+    group, total, full body text); one internal sheet per calendar follows.
 - **32- and 64-bit Office:** every `Declare` uses `PtrSafe` and `LongPtr`;
   no ActiveX controls such as `MSCOMCT2.OCX`, which do not exist in 64-bit.
 - **Start button:** the user adds `OfficiumReport` to the ribbon or the Quick
@@ -118,15 +124,17 @@ The questions below were open during planning. The user asked for a finished
 handover without further rounds, so the defaults apply until the first real
 report says otherwise.
 
-- Customer assignment: category or subject keyword, both count. An empty
-  customer reports all appointments of the period.
+- Customer assignment: subject keyword only (changed after the first customer
+  run). An empty customer reports all appointments of the period.
 - All-day appointments are excluded.
 - Free and tentative appointments count.
 - The clipboard text shows only the first non-blank line of the body; the CSV
   keeps the full body.
 - An appointment belongs to the period in which it starts.
-- Only the default calendar is read.
+- All calendars are read, including shared ones (changed after the first
+  customer run).
 - The summary message appears before Excel opens, so it cannot end up behind
   the Excel window.
-- The Excel total uses `SUBTOTAL(109, ...)`, so it follows the autofilter.
+- The total on the internal calendar sheets uses `SUBTOTAL(109, ...)`, so it
+  follows the autofilter.
 - The last customer is remembered via `SaveSetting` (registry, HKCU).

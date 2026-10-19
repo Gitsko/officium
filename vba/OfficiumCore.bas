@@ -30,7 +30,8 @@ Public Const COL_SUBJECT As Long = 4     ' String
 Public Const COL_CATEGORIES As Long = 5  ' String
 Public Const COL_BODY As Long = 6        ' String
 Public Const COL_GROUP As Long = 7       ' String, see GroupKey
-Public Const COL_COUNT As Long = 7
+Public Const COL_CALENDAR As Long = 8    ' String, name of the calendar
+Public Const COL_COUNT As Long = 8
 
 ' Half-open range [fromDate, untilDate) of a preset period relative to today.
 Public Sub PeriodRange(ByVal period As OfficiumPeriod, ByVal today As Date, _
@@ -57,27 +58,11 @@ Public Sub PeriodRange(ByVal period As OfficiumPeriod, ByVal today As Date, _
     End Select
 End Sub
 
-' True if one of the categories equals the customer or the subject contains it,
-' both ignoring case. Categories are separated by "," or ";", depending on the
-' Windows list separator. An empty customer matches every appointment.
-Public Function MatchesCustomer(ByVal customer As String, ByVal subjectText As String, _
-                                ByVal categoryList As String) As Boolean
+' True if the subject contains the customer, ignoring case. Categories do not
+' count. An empty customer matches every appointment.
+Public Function MatchesCustomer(ByVal customer As String, ByVal subjectText As String) As Boolean
     customer = Trim$(customer)
-    If Len(customer) = 0 Then
-        MatchesCustomer = True
-        Exit Function
-    End If
-    If InStr(1, subjectText, customer, vbTextCompare) > 0 Then
-        MatchesCustomer = True
-        Exit Function
-    End If
-    Dim category As Variant
-    For Each category In Split(Replace(categoryList, ";", ","), ",")
-        If StrComp(Trim$(category), customer, vbTextCompare) = 0 Then
-            MatchesCustomer = True
-            Exit Function
-        End If
-    Next
+    MatchesCustomer = (Len(customer) = 0) Or (InStr(1, subjectText, customer, vbTextCompare) > 0)
 End Function
 
 ' False for appointments that are no time spent: all-day events, cancelled
@@ -105,14 +90,28 @@ Public Function GroupKey(ByVal startTime As Date, ByVal grouping As OfficiumGrou
     End Select
 End Function
 
+' Readable name of a group key: "2026-10" -> "Oktober 2026", "2026-Q4" ->
+' "4. Quartal 2026", "" stays empty. Month names are fixed, not from Windows.
+Public Function GroupLabel(ByVal key As String) As String
+    If Len(key) = 0 Then Exit Function
+    If Mid$(key, 6, 1) = "Q" Then
+        GroupLabel = Mid$(key, 7) & ". Quartal " & Left$(key, 4)
+    Else
+        GroupLabel = Split("Januar Februar März April Mai Juni Juli August September Oktober November Dezember")( _
+            CLng(Mid$(key, 6, 2)) - 1) & " " & Left$(key, 4)
+    End If
+End Function
+
 ' Minutes as hours:minutes that keeps counting past 24 hours, e.g. 2250 -> "37:30".
 Public Function FormatMinutes(ByVal minutes As Long) As String
     FormatMinutes = minutes \ 60 & ":" & Format(minutes Mod 60, "00")
 End Function
 
-' Sums the minutes of a report per group. Fills keys and sums (1-based, groups
-' in order of first appearance) and returns the number of groups.
-Public Function SumByGroup(ByVal report As Variant, ByRef keys() As String, ByRef sums() As Long) As Long
+' Sums the minutes of a report per value of one column, e.g. COL_CALENDAR.
+' Fills keys and sums (1-based, values in order of first appearance) and
+' returns the number of values.
+Public Function SumByColumn(ByVal report As Variant, ByVal keyColumn As Long, _
+                            ByRef keys() As String, ByRef sums() As Long) As Long
     If IsEmpty(report) Then Exit Function
     Dim n As Long, r As Long, g As Long
     ReDim keys(1 To UBound(report, 1))
@@ -120,18 +119,125 @@ Public Function SumByGroup(ByVal report As Variant, ByRef keys() As String, ByRe
     For r = 1 To UBound(report, 1)
         g = 1
         Do While g <= n
-            If keys(g) = report(r, COL_GROUP) Then Exit Do
+            If keys(g) = report(r, keyColumn) Then Exit Do
             g = g + 1
         Loop
         If g > n Then
             n = g
-            keys(n) = report(r, COL_GROUP)
+            keys(n) = report(r, keyColumn)
         End If
         sums(g) = sums(g) + report(r, COL_MINUTES)
     Next
     ReDim Preserve keys(1 To n)
     ReDim Preserve sums(1 To n)
-    SumByGroup = n
+    SumByColumn = n
+End Function
+
+' Sums the minutes of a report per group, see SumByColumn.
+Public Function SumByGroup(ByVal report As Variant, ByRef keys() As String, ByRef sums() As Long) As Long
+    SumByGroup = SumByColumn(report, COL_GROUP, keys, sums)
+End Function
+
+' The rows of a report whose column holds the given value, as a report of
+' their own. Empty if there are none.
+Public Function RowsWhere(ByVal report As Variant, ByVal keyColumn As Long, ByVal wanted As String) As Variant
+    If IsEmpty(report) Then Exit Function
+    Dim n As Long, r As Long, c As Long, part() As Variant
+    For r = 1 To UBound(report, 1)
+        If report(r, keyColumn) = wanted Then n = n + 1
+    Next
+    If n = 0 Then Exit Function
+    ReDim part(1 To n, 1 To COL_COUNT)
+    n = 0
+    For r = 1 To UBound(report, 1)
+        If report(r, keyColumn) = wanted Then
+            n = n + 1
+            For c = 1 To COL_COUNT
+                part(n, c) = report(r, c)
+            Next
+        End If
+    Next
+    RowsWhere = part
+End Function
+
+' The report sorted by start, without rows that repeat an earlier row's start,
+' end and subject: a meeting in the own and a shared calendar counts once,
+' for the calendar listed first. Rows with the same start keep their order.
+Public Function SortedWithoutDuplicates(ByVal report As Variant) As Variant
+    If IsEmpty(report) Then Exit Function
+    Dim order() As Long, n As Long, r As Long, i As Long, j As Long, moving As Long
+    ReDim order(1 To UBound(report, 1))
+    ' Insertion sort over row numbers; reports hold at most a few hundred rows.
+    For r = 1 To UBound(report, 1)
+        i = n
+        Do While i >= 1
+            If report(order(i), COL_START) <= report(r, COL_START) Then Exit Do
+            i = i - 1
+        Loop
+        For j = n To i + 1 Step -1
+            order(j + 1) = order(j)
+        Next
+        order(i + 1) = r
+        n = n + 1
+    Next
+
+    Dim kept() As Long, keptCount As Long, isDuplicate As Boolean
+    ReDim kept(1 To n)
+    For i = 1 To n
+        moving = order(i)
+        isDuplicate = False
+        ' Duplicates share the start, so they sit right before this row.
+        j = keptCount
+        Do While j >= 1
+            If report(kept(j), COL_START) <> report(moving, COL_START) Then Exit Do
+            If report(kept(j), COL_END) = report(moving, COL_END) Then
+                If report(kept(j), COL_SUBJECT) = report(moving, COL_SUBJECT) Then isDuplicate = True
+            End If
+            j = j - 1
+        Loop
+        If Not isDuplicate Then
+            keptCount = keptCount + 1
+            kept(keptCount) = moving
+        End If
+    Next
+
+    Dim result() As Variant, c As Long
+    ReDim result(1 To keptCount, 1 To COL_COUNT)
+    For i = 1 To keptCount
+        For c = 1 To COL_COUNT
+            result(i, c) = report(kept(i), c)
+        Next
+    Next
+    SortedWithoutDuplicates = result
+End Function
+
+' Excel sheet name for a calendar: the characters Excel forbids become "-",
+' at most 31 characters, and " (2)", " (3)" ... if the name is in takenNames
+' already (ignoring case). The result is added to takenNames.
+Public Function SheetName(ByVal calendarName As String, ByVal takenNames As Collection) As String
+    Dim forbidden As Variant, baseName As String, candidate As String, n As Long
+    baseName = calendarName
+    For Each forbidden In Array(":", "\", "/", "?", "*", "[", "]", "'")
+        baseName = Replace(baseName, forbidden, "-")
+    Next
+    baseName = Trim$(baseName)
+    If Len(baseName) = 0 Then baseName = "Kalender"
+    candidate = Left$(baseName, 31)
+    n = 1
+    Do While IsTaken(takenNames, candidate)
+        n = n + 1
+        candidate = Left$(baseName, 31 - Len(CStr(n)) - 3) & " (" & n & ")"
+    Loop
+    takenNames.Add candidate, candidate
+    SheetName = candidate
+End Function
+
+' Collection keys are compared ignoring case, like Excel sheet names.
+Private Function IsTaken(ByVal takenNames As Collection, ByVal candidate As String) As Boolean
+    Dim probe As Variant
+    On Error Resume Next
+    probe = takenNames.Item(candidate)
+    IsTaken = (Err.Number = 0)
 End Function
 
 ' One line per group and a grand total with the number of appointments,
@@ -169,7 +275,8 @@ Public Function CsvFileName(ByVal customer As String, ByVal fromDate As Date, By
         & Format(fromDate, "yyyy-mm-dd") & " bis " & Format(untilDate - 1, "yyyy-mm-dd") & ".csv"
 End Function
 
-Private Function CustomerLabel(ByVal customer As String) As String
+' The customer as shown in titles: "Alle Termine" if empty.
+Public Function CustomerLabel(ByVal customer As String) As String
     CustomerLabel = Trim$(customer)
     If Len(CustomerLabel) = 0 Then CustomerLabel = "Alle Termine"
 End Function
@@ -221,12 +328,12 @@ End Function
 ' the full body, then the totals per group and overall.
 Public Function CsvText(ByVal report As Variant) As String
     Dim lines As String, r As Long
-    lines = "Datum;Beginn;Ende;Dauer;Minuten;Gruppe;Betreff;Kategorien;Text" & vbCrLf
+    lines = "Datum;Beginn;Ende;Dauer;Minuten;Gruppe;Kalender;Betreff;Kategorien;Text" & vbCrLf
     For r = 1 To UBound(report, 1)
         lines = lines & DateText(report(r, COL_START)) & ";" & TimeText(report(r, COL_START)) & ";" _
             & TimeText(report(r, COL_END)) & ";" & FormatMinutes(report(r, COL_MINUTES)) & ";" _
             & report(r, COL_MINUTES) & ";" & CsvField(report(r, COL_GROUP)) & ";" _
-            & CsvField(report(r, COL_SUBJECT)) & ";" & CsvField(report(r, COL_CATEGORIES)) & ";" _
+            & CsvField(report(r, COL_CALENDAR)) & ";" & CsvField(report(r, COL_SUBJECT)) & ";" & CsvField(report(r, COL_CATEGORIES)) & ";" _
             & CsvField(TrimText(report(r, COL_BODY))) & vbCrLf
     Next
 
