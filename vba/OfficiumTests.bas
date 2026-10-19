@@ -15,6 +15,7 @@ Public Sub OfficiumSelfTest()
     TestCountsAsWork
     TestGrouping
     TestReportTitle
+    TestCsv
 
     Dim summary As String
     summary = passed & " bestanden, " & failed & " fehlgeschlagen"
@@ -105,6 +106,56 @@ Private Sub TestReportTitle()
     AssertEqual "title: customer", "Acme, 01.10.2026 bis 31.10.2026", ReportTitle(" Acme ", #10/1/2026#, #11/1/2026#)
     AssertEqual "title: all appointments", "Alle Termine, 01.10.2026 bis 31.12.2026", ReportTitle("", #10/1/2026#, #1/1/2027#)
 End Sub
+
+Private Sub TestCsv()
+    AssertEqual "csv field: plain", "Acme, Intern", CsvField("Acme, Intern")
+    AssertEqual "csv field: separator", Quoted("'a;b'"), CsvField("a;b")
+    AssertEqual "csv field: quotes doubled", Quoted("'Punkt ''A'''"), CsvField(Quoted("Punkt 'A'"))
+    AssertEqual "csv field: line break", Quoted("'a" & vbCrLf & "b'"), CsvField("a" & vbCrLf & "b")
+    AssertEqual "csv field: formula-like text", " - Punkt", CsvField("- Punkt")
+    AssertEqual "trim text", "a" & vbCrLf & "b", TrimText(vbTab & " a" & vbCrLf & "b " & vbCrLf & vbCrLf)
+    AssertEqual "trim text: only blanks", "", TrimText(" " & vbCrLf)
+    AssertEqual "csv file name", "Officium A-B- C- 2026-10-01 bis 2026-10-31.csv", _
+        CsvFileName("A/B: C?", #10/1/2026#, #11/1/2026#)
+
+    Dim csv As String, totals As String
+    csv = CsvText(SampleReport())
+    AssertEqual "csv: header first", 1, InStr(csv, "Datum;Beginn;Ende;Dauer;Minuten;Gruppe;Betreff;Kategorien;Text" & vbCrLf)
+    AssertEqual "csv: row with quoted fields", True, InStr(csv, vbCrLf & _
+        "06.10.2026;09:00;10:30;1:30;90;2026-10;" & Quoted("'Workshop; Planung'") & ";Acme;" & _
+        Quoted("'Agenda" & vbCrLf & "Punkt ''A'''") & vbCrLf) > 0
+    AssertEqual "csv: plain row", True, InStr(csv, vbCrLf & _
+        "02.11.2026;14:00;14:45;0:45;45;2026-11;Call;Acme, Intern;" & vbCrLf) > 0
+    totals = vbCrLf & vbCrLf & "Summe;Dauer;Minuten" & vbCrLf & "2026-10;1:30;90" & vbCrLf & _
+        "2026-11;0:45;45" & vbCrLf & "Gesamt;2:15;135" & vbCrLf
+    AssertEqual "csv: totals at the end", totals, Right$(csv, Len(totals))
+End Sub
+
+' Text with ' turned into ", to keep expected CSV values readable.
+Private Function Quoted(ByVal fieldText As String) As String
+    Quoted = Replace(fieldText, "'", """")
+End Function
+
+' Two appointments in October and November with every column filled.
+Private Function SampleReport() As Variant
+    Dim report() As Variant
+    ReDim report(1 To 2, 1 To COL_COUNT)
+    report(1, COL_START) = #10/6/2026 9:00:00 AM#
+    report(1, COL_END) = #10/6/2026 10:30:00 AM#
+    report(1, COL_MINUTES) = 90
+    report(1, COL_SUBJECT) = "Workshop; Planung"
+    report(1, COL_CATEGORIES) = "Acme"
+    report(1, COL_BODY) = "Agenda" & vbCrLf & "Punkt ""A""" & vbCrLf & vbCrLf
+    report(1, COL_GROUP) = "2026-10"
+    report(2, COL_START) = #11/2/2026 2:00:00 PM#
+    report(2, COL_END) = #11/2/2026 2:45:00 PM#
+    report(2, COL_MINUTES) = 45
+    report(2, COL_SUBJECT) = "Call"
+    report(2, COL_CATEGORIES) = "Acme, Intern"
+    report(2, COL_BODY) = ""
+    report(2, COL_GROUP) = "2026-11"
+    SampleReport = report
+End Function
 
 ' Report with only the group and minutes columns filled, from pairs of values.
 Private Function ReportOf(ParamArray groupAndMinutes() As Variant) As Variant

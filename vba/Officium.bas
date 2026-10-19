@@ -19,7 +19,10 @@ Public Sub OfficiumReport()
         MsgBox "Keine passenden Termine." & vbCrLf & vbCrLf & title, vbInformation, "Officium"
         Exit Sub
     End If
-    MsgBox title & vbCrLf & vbCrLf & TotalsText(report), vbInformation, "Officium"
+    Dim results As String
+    results = SaveCsv(CsvFileName(customer, fromDate, untilDate), report, True)
+    MsgBox title & vbCrLf & vbCrLf & TotalsText(report) & vbCrLf & vbCrLf & results, _
+        vbInformation, "Officium"
     Exit Sub
 
 Failed:
@@ -61,6 +64,47 @@ Private Function CollectReport(ByVal fromDate As Date, ByVal untilDate As Date, 
         Next
     Next
     CollectReport = report
+End Function
+
+' Saves the report as CSV in the documents folder and opens it if asked.
+' Returns a status line for the final message.
+Private Function SaveCsv(ByVal csvName As String, ByVal report As Variant, ByVal openIt As Boolean) As String
+    Dim filePath As String
+    filePath = DocumentsFolder() & "\" & csvName
+    On Error GoTo Failed
+    SaveUtf8 filePath, CsvText(report)
+    SaveCsv = "CSV gespeichert: " & filePath
+    If openIt Then
+        ' Opens the file like a double click; fails quietly if Windows Script Host is blocked.
+        On Error Resume Next
+        CreateObject("WScript.Shell").Run """" & filePath & """"
+    End If
+    Exit Function
+
+Failed:
+    ' Typically the file of an earlier run is still open in Excel.
+    SaveCsv = "CSV nicht gespeichert (" & Err.Description & "): " & filePath
+End Function
+
+' Writes text as UTF-8 with byte order mark, which German Excel needs to show
+' umlauts. ADODB.Stream adds the mark itself.
+Private Sub SaveUtf8(ByVal filePath As String, ByVal content As String)
+    Dim stream As Object
+    Set stream = CreateObject("ADODB.Stream")
+    stream.Type = 2                ' adTypeText
+    stream.Charset = "utf-8"
+    stream.Open
+    stream.WriteText content
+    stream.SaveToFile filePath, 2  ' adSaveCreateOverWrite
+    stream.Close
+End Sub
+
+' The user's documents folder, also when it is redirected to OneDrive.
+Private Function DocumentsFolder() As String
+    On Error Resume Next
+    DocumentsFolder = CreateObject("WScript.Shell").SpecialFolders("MyDocuments")
+    On Error GoTo 0
+    If Len(DocumentsFolder) = 0 Then DocumentsFolder = Environ$("USERPROFILE") & "\Documents"
 End Function
 
 ' Asks for a preset period or a free range of days; returns the half-open

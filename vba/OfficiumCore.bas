@@ -160,7 +160,82 @@ End Function
 
 ' Heading of a report for [fromDate, untilDate), e.g. "Acme, 01.10.2026 bis 31.10.2026".
 Public Function ReportTitle(ByVal customer As String, ByVal fromDate As Date, ByVal untilDate As Date) As String
-    customer = Trim$(customer)
-    If Len(customer) = 0 Then customer = "Alle Termine"
-    ReportTitle = customer & ", " & DateText(fromDate) & " bis " & DateText(untilDate - 1)
+    ReportTitle = CustomerLabel(customer) & ", " & DateText(fromDate) & " bis " & DateText(untilDate - 1)
+End Function
+
+' File name of the CSV for a report, e.g. "Officium Acme 2026-10-01 bis 2026-10-31.csv".
+Public Function CsvFileName(ByVal customer As String, ByVal fromDate As Date, ByVal untilDate As Date) As String
+    CsvFileName = "Officium " & SafeFileName(CustomerLabel(customer)) & " " _
+        & Format(fromDate, "yyyy-mm-dd") & " bis " & Format(untilDate - 1, "yyyy-mm-dd") & ".csv"
+End Function
+
+Private Function CustomerLabel(ByVal customer As String) As String
+    CustomerLabel = Trim$(customer)
+    If Len(CustomerLabel) = 0 Then CustomerLabel = "Alle Termine"
+End Function
+
+' Text usable in a Windows file name: \ / : * ? " < > | become "-".
+Public Function SafeFileName(ByVal fileText As String) As String
+    Dim forbidden As Variant
+    For Each forbidden In Array("\", "/", ":", "*", "?", """", "<", ">", "|")
+        fileText = Replace(fileText, forbidden, "-")
+    Next
+    SafeFileName = Trim$(fileText)
+End Function
+
+' Text without leading and trailing spaces, tabs and line breaks, which
+' appointment bodies usually end with.
+Public Function TrimText(ByVal fullText As String) As String
+    Dim first As Long, last As Long
+    first = 1
+    last = Len(fullText)
+    Do While first <= last
+        If Not IsBlank(Mid$(fullText, first, 1)) Then Exit Do
+        first = first + 1
+    Loop
+    Do While last >= first
+        If Not IsBlank(Mid$(fullText, last, 1)) Then Exit Do
+        last = last - 1
+    Loop
+    TrimText = Mid$(fullText, first, last - first + 1)
+End Function
+
+Private Function IsBlank(ByVal character As String) As Boolean
+    IsBlank = InStr(" " & vbTab & vbCr & vbLf, character) > 0
+End Function
+
+' One field of a CSV for German Excel: quoted if it contains ";", a quote or a
+' line break, with quotes doubled. Excel reads text starting with = + - @ as a
+' formula even when quoted, so such text gets a leading space.
+Public Function CsvField(ByVal fieldText As String) As String
+    If fieldText Like "[=+@-]*" Then fieldText = " " & fieldText
+    If InStr(fieldText, ";") > 0 Or InStr(fieldText, """") > 0 _
+       Or InStr(fieldText, vbCr) > 0 Or InStr(fieldText, vbLf) > 0 Then
+        CsvField = """" & Replace(fieldText, """", """""") & """"
+    Else
+        CsvField = fieldText
+    End If
+End Function
+
+' Report as semicolon-separated CSV: a header, one line per appointment with
+' the full body, then the totals per group and overall.
+Public Function CsvText(ByVal report As Variant) As String
+    Dim lines As String, r As Long
+    lines = "Datum;Beginn;Ende;Dauer;Minuten;Gruppe;Betreff;Kategorien;Text" & vbCrLf
+    For r = 1 To UBound(report, 1)
+        lines = lines & DateText(report(r, COL_START)) & ";" & TimeText(report(r, COL_START)) & ";" _
+            & TimeText(report(r, COL_END)) & ";" & FormatMinutes(report(r, COL_MINUTES)) & ";" _
+            & report(r, COL_MINUTES) & ";" & CsvField(report(r, COL_GROUP)) & ";" _
+            & CsvField(report(r, COL_SUBJECT)) & ";" & CsvField(report(r, COL_CATEGORIES)) & ";" _
+            & CsvField(TrimText(report(r, COL_BODY))) & vbCrLf
+    Next
+
+    Dim keys() As String, sums() As Long, n As Long, g As Long, total As Long
+    n = SumByGroup(report, keys, sums)
+    lines = lines & vbCrLf & "Summe;Dauer;Minuten" & vbCrLf
+    For g = 1 To n
+        total = total + sums(g)
+        If Len(keys(g)) > 0 Then lines = lines & CsvField(keys(g)) & ";" & FormatMinutes(sums(g)) & ";" & sums(g) & vbCrLf
+    Next
+    CsvText = lines & "Gesamt;" & FormatMinutes(total) & ";" & total & vbCrLf
 End Function

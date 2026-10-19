@@ -151,6 +151,10 @@ UTF-8 with BOM, saved to the documents folder and opened.
 
 **Files likely touched:** `vba/OfficiumCore.bas`, `vba/Officium.bas`, `vba/OfficiumTests.bas`
 
+**Notes:** Code and tests written; checks pending on the user's PC. Text
+starting with = + - @ gets a leading space so Excel does not read it as a
+formula.
+
 **Estimated scope:** S
 
 ## Task 7: Clipboard text
