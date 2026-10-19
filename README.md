@@ -60,7 +60,7 @@ installiert ist. Was beim ersten Durchlauf zu prüfen ist, steht unter
 
 Im VBA-Editor mit **Strg+G** das Direktfenster einblenden, den Cursor in
 `OfficiumSelfTest` (Modul `OfficiumTests`) setzen und **F5** drücken. Erwartet
-ist die Meldung „73 bestanden, 0 fehlgeschlagen“. Schlägt etwas fehl, steht im
+ist die Meldung „78 bestanden, 0 fehlgeschlagen“. Schlägt etwas fehl, steht im
 Direktfenster, welcher Test und mit welchem Wert.
 
 Läuft gar kein Makro, steht die Makrosicherheit auf „alle deaktivieren“. Dann
@@ -148,6 +148,9 @@ Officium liest alle Kalender, die in der Kalenderansicht links aufgeführt
 sind, auch freigegebene, dazu den Standardkalender jedes Postfachs im Profil.
 Ein freigegebener Kalender, der dort nicht steht, fehlt im Bericht; im
 Zweifel einmal in der Kalenderansicht anhaken und den Bericht neu erstellen.
+Jeder Kalender heißt im Bericht nach seinem Postfach und seinem Namen, zum
+Beispiel „max@acme.de - Kalender“. Nennt der Name in Outlook das Postfach
+schon, bleibt er unverändert.
 Die Meldung am Ende nennt die Zahl der durchsuchten Kalender und die, die
 sich nicht öffnen oder lesen ließen. Steht derselbe Termin (gleicher Beginn, gleiches Ende,
 gleicher Betreff) in mehreren Kalendern, zählt er nur einmal, und zwar beim
@@ -188,7 +191,7 @@ Bericht fehlt oder welcher Kalender nicht lesbar ist.
 
 Weil der Code noch nie gelaufen ist, beim ersten Mal diese Punkte prüfen:
 
-1. Kompilieren ohne Fehler, Selbsttest mit 73 bestanden.
+1. Kompilieren ohne Fehler, Selbsttest mit 78 bestanden.
 2. `OfficiumListAppointments` für eine Woche mit einem Serientermin: Jedes
    Vorkommen erscheint einzeln, die Anzahl passt zur Kalenderansicht.
 3. `OfficiumReport` für einen Kunden und den letzten Monat: Die Summe stimmt

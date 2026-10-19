@@ -122,6 +122,15 @@ Private Sub TestCalendars()
         SheetName("Kalender - Maximilian Mustermann", taken)
     AssertEqual "sheet name: blank", "Kalender", SheetName(" ", taken)
 
+    AssertEqual "label: mailbox before the name", "max@acme.de - Kalender", _
+        CalendarLabel("Kalender", "\\max@acme.de\Kalender")
+    AssertEqual "label: German mailbox prefix", "Max Muster - Kalender", _
+        CalendarLabel("Kalender", "\\Postfach - Max Muster\Kalender")
+    AssertEqual "label: name shows the mailbox already", "Max Muster", _
+        CalendarLabel("Max Muster", "\\Postfach - Max Muster\Kalender")
+    AssertEqual "label: no path", "Kalender", CalendarLabel("Kalender", "")
+    AssertEqual "label: no name", "max@acme.de", CalendarLabel("", "\\max@acme.de\Kalender")
+
     ' Rows: the November call of SampleReport, the same call from a shared
     ' calendar, then the October workshop.
     Dim mixed() As Variant, sample As Variant, c As Long, merged As Variant

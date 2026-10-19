@@ -211,6 +211,31 @@ Public Function SortedWithoutDuplicates(ByVal report As Variant) As Variant
     SortedWithoutDuplicates = result
 End Function
 
+' Name of a calendar that says whose it is: the mailbox from the folder path
+' ("\\max@acme.de\Kalender") before the name shown in Outlook, as in
+' "max@acme.de - Kalender". The name alone if it names the mailbox already
+' or the path has none.
+Public Function CalendarLabel(ByVal displayName As String, ByVal folderPath As String) As String
+    Dim mailbox As String, prefix As Variant
+    mailbox = folderPath
+    If Left$(mailbox, 2) = "\\" Then mailbox = Mid$(mailbox, 3)
+    If InStr(mailbox, "\") > 0 Then mailbox = Left$(mailbox, InStr(mailbox, "\") - 1)
+    For Each prefix In Array("Postfach - ", "Mailbox - ")
+        If StrComp(Left$(mailbox, Len(prefix)), prefix, vbTextCompare) = 0 Then mailbox = Mid$(mailbox, Len(prefix) + 1)
+    Next
+    mailbox = Trim$(mailbox)
+    displayName = Trim$(displayName)
+    If Len(mailbox) = 0 Then
+        CalendarLabel = displayName
+    ElseIf Len(displayName) = 0 Then
+        CalendarLabel = mailbox
+    ElseIf InStr(1, displayName, mailbox, vbTextCompare) > 0 Then
+        CalendarLabel = displayName
+    Else
+        CalendarLabel = mailbox & " - " & displayName
+    End If
+End Function
+
 ' Excel sheet name for a calendar: the characters Excel forbids become "-",
 ' at most 31 characters, and " (2)", " (3)" ... if the name is in takenNames
 ' already (ignoring case). The result is added to takenNames.

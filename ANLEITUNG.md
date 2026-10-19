@@ -99,7 +99,8 @@ abgesagte und abgelehnte Besprechungen zählen nicht. Ein Termin zählt in dem
 Monat, in dem er beginnt.
 
 Gelesen werden alle Kalender, die links in der Kalenderansicht stehen, auch
-freigegebene. Fehlt ein freigegebener Kalender, ihn dort einmal anhaken. Steht
+freigegebene. Fehlt ein freigegebener Kalender, ihn dort einmal anhaken.
+Jeder Kalender erscheint mit seinem Postfach, etwa „max@acme.de - Kalender“. Steht
 derselbe Termin in mehreren Kalendern, zählt er nur einmal. Die Meldung am Ende
 nennt, wie viele Kalender durchsucht wurden und welche sich nicht öffnen
 oder lesen ließen.

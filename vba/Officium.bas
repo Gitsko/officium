@@ -110,7 +110,7 @@ End Function
 ' pane that cannot be opened are appended to skipped.
 Private Function AllCalendars(ByRef skipped As String) As Collection
     Dim calendars As New Collection, calModule As Object, grp As Object, nav As Object
-    Dim st As Object, calendarFolder As Object
+    Dim st As Object, calendarFolder As Object, calendarPath As String
     ' Without an Outlook window or with a shared calendar that is gone, single
     ' steps fail; the calendars reached so far still count.
     On Error Resume Next
@@ -123,7 +123,9 @@ Private Function AllCalendars(ByRef skipped As String) As Collection
                 If calendarFolder Is Nothing Then
                     AppendName skipped, nav.DisplayName
                 Else
-                    AddCalendar calendars, calendarFolder, nav.DisplayName
+                    calendarPath = ""
+                    calendarPath = calendarFolder.FolderPath
+                    AddCalendar calendars, calendarFolder, CalendarLabel(nav.DisplayName, calendarPath)
                 End If
             Next
         Next
@@ -132,7 +134,9 @@ Private Function AllCalendars(ByRef skipped As String) As Collection
         Set calendarFolder = Nothing
         Set calendarFolder = st.GetDefaultFolder(olFolderCalendar)
         If Not calendarFolder Is Nothing Then
-            AddCalendar calendars, calendarFolder, calendarFolder.Name & " (" & st.DisplayName & ")"
+            calendarPath = ""
+            calendarPath = calendarFolder.FolderPath
+            AddCalendar calendars, calendarFolder, CalendarLabel(calendarFolder.Name, calendarPath)
         End If
     Next
     Set AllCalendars = calendars
