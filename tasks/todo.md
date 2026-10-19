@@ -35,6 +35,8 @@ categories) to the Immediate window, followed by the count.
 
 **Files likely touched:** `vba/Officium.bas`, `README.md`
 
+**Notes:** Code written (`dd0abf4`); checks pending on the user's PC.
+
 **Estimated scope:** S
 
 ## Task 2: Self-test macro, signing and ribbon button
@@ -53,6 +55,8 @@ README explains import, SelfCert signing and the ribbon button.
 **Dependencies:** Task 1
 
 **Files likely touched:** `vba/OfficiumCore.bas`, `vba/OfficiumTests.bas`, `README.md`
+
+**Notes:** Code and README written; checks pending on the user's PC.
 
 **Estimated scope:** S
 

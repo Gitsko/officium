@@ -11,7 +11,8 @@ ausführen kann.
 ## Stand
 
 Officium ist noch in Arbeit (Plan: `tasks/plan.md`, Aufgaben: `tasks/todo.md`).
-Im Moment gibt es ein Makro: `OfficiumListAppointments`. Es fragt nach einem
+Im Moment gibt es zwei Makros. `OfficiumSelfTest` prüft die interne Logik.
+`OfficiumListAppointments` fragt nach einem
 Zeitraum und schreibt alle Termine darin mit Beginn, Ende, Dauer, Betreff und
 Kategorien ins Direktfenster des VBA-Editors. Serientermine erscheinen einzeln,
 mit jedem Vorkommen.
@@ -34,32 +35,80 @@ Geplant sind außerdem:
 
 ## Installieren
 
-1. `vba/Officium.bas` herunterladen, auf GitHub über **Download raw file**.
-   Die Datei nicht in einem Editor öffnen und neu speichern. Sonst gehen
-   Zeilenenden oder Umlaute kaputt.
+### 1. Module importieren
+
+1. Die drei Dateien aus `vba/` herunterladen, auf GitHub jeweils über
+   **Download raw file**: `Officium.bas`, `OfficiumCore.bas` und
+   `OfficiumTests.bas`. Die Dateien nicht in einem Editor öffnen und neu
+   speichern, sonst gehen Zeilenenden oder Umlaute kaputt.
 2. Im klassischen Outlook mit **Alt+F11** den VBA-Editor öffnen.
-3. Eine ältere Version vorher entfernen: links unter **Module** Rechtsklick auf
-   `Officium` > **Entfernen von Officium**, den Export ablehnen.
-4. **Datei** > **Datei importieren** und `Officium.bas` auswählen. Links unter
-   **Module** erscheint `Officium`.
-5. Läuft das Makro nicht, steht die Makrosicherheit vermutlich auf „alle
-   deaktivieren“. Unter **Datei** > **Optionen** > **Trust Center** >
-   **Einstellungen für das Trust Center** > **Makroeinstellungen** die Option
-   „Benachrichtigungen für alle Makros“ wählen und Outlook neu starten. Das
-   ist eine Lösung für den Übergang. Mit Aufgabe 2 wird das Makro signiert,
-   dann reicht „nur digital signierte Makros“.
+3. Eine ältere Version vorher entfernen: links unter **Module** jeweils
+   Rechtsklick auf das Modul > **Entfernen von …**, den Export ablehnen.
+4. **Datei** > **Datei importieren**, nacheinander alle drei Dateien. Links
+   unter **Module** stehen danach `Officium`, `OfficiumCore` und `OfficiumTests`.
+5. **Datei** > **Speichern** (Strg+S).
+
+### 2. Selbsttest
+
+Im VBA-Editor mit **Strg+G** das Direktfenster einblenden, den Cursor in
+`OfficiumSelfTest` (Modul `OfficiumTests`) setzen und **F5** drücken. Es
+erscheint eine Meldung wie „11 bestanden, 0 fehlgeschlagen“. Schlägt etwas
+fehl, steht im Direktfenster, welcher Test und mit welchem Wert.
+
+Läuft gar kein Makro, steht die Makrosicherheit auf „alle deaktivieren“. Dann
+erst Schritt 3 erledigen.
+
+### 3. Makro signieren
+
+Outlook führt Makros sicher nur aus, wenn sie signiert sind. Ein eigenes
+Zertifikat erzeugt `SELFCERT.EXE`, das bei Office dabei ist.
+
+1. `SELFCERT.EXE` starten. Es liegt im Office-Ordner, meist
+   `C:\Program Files\Microsoft Office\root\Office16\`, bei 32-Bit-Office auf
+   64-Bit-Windows unter `C:\Program Files (x86)\…`. Als Namen `Officium`
+   eingeben.
+2. Im VBA-Editor **Extras** > **Digitale Signatur** > **Wählen** und das
+   Zertifikat `Officium` auswählen, dann speichern.
+3. In Outlook **Datei** > **Optionen** > **Trust Center** > **Einstellungen
+   für das Trust Center** > **Makroeinstellungen**: „Benachrichtigungen für
+   digital signierte Makros, alle anderen Makros sind deaktiviert“ wählen.
+4. Outlook neu starten. Beim ersten Makroaufruf fragt Outlook nach dem
+   Herausgeber, dann **Allen Dokumenten von diesem Herausgeber vertrauen**
+   wählen.
+
+Ändert man später etwas an den Modulen, signiert Outlook beim Speichern neu,
+solange das Zertifikat auf dem Rechner liegt.
+
+Lässt sich die Makroeinstellung nicht ändern, hat die IT sie per Richtlinie
+gesperrt. Dann läuft Officium auf diesem Rechner nicht.
+
+### 4. Button in der Menüleiste
+
+1. In Outlook **Datei** > **Optionen** > **Menüband anpassen**.
+2. Rechts die Registerkarte **Start** markieren und **Neue Gruppe** anlegen,
+   über **Umbenennen** zum Beispiel „Officium“ nennen und ein Symbol wählen.
+3. Links unter **Befehle auswählen** auf **Makros** umstellen,
+   `Project1.OfficiumListAppointments` auswählen und **Hinzufügen** klicken.
+4. Den Befehl über **Umbenennen** zum Beispiel „Termine auflisten“ nennen.
+   Mit **OK** schließen.
+
+Alternativ geht es über die Symbolleiste für den Schnellzugriff, dort ebenfalls
+unter **Makros**.
 
 ## Benutzen
 
-Im VBA-Editor mit **Strg+G** das Direktfenster einblenden, den Cursor in
-`OfficiumListAppointments` setzen und **F5** drücken. Officium fragt nach dem
-ersten und dem letzten Tag, vorbelegt ist die aktuelle Woche. Danach meldet es
-die Anzahl der Termine, die Liste steht im Direktfenster.
+Den Button anklicken, oder mit **Alt+F8** die Makroliste öffnen und
+`OfficiumListAppointments` starten. Officium fragt nach dem ersten und dem
+letzten Tag, vorbelegt ist die aktuelle Woche. Danach meldet es die Anzahl der
+Termine. Die Liste steht im Direktfenster des VBA-Editors (Alt+F11, dann
+Strg+G).
 
 ## Entfernen
 
-Im VBA-Editor Rechtsklick auf `Officium` > **Entfernen von Officium**. Wurde
-die Makrosicherheit für den Test gelockert, sie wieder zurückstellen.
+Im VBA-Editor Rechtsklick auf die drei Module > **Entfernen von …**, den Button
+unter **Menüband anpassen** wieder herausnehmen. Das Zertifikat lässt sich in
+Windows unter **Benutzerzertifikate verwalten** > **Eigene Zertifikate**
+löschen.
 
 ## Entwicklung
 
