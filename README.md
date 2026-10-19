@@ -26,7 +26,8 @@ Geplant sind außerdem:
 
 ## Voraussetzungen
 
-- Klassisches Outlook unter Windows (Microsoft 365 Apps oder Office 2016 und neuer)
+- Klassisches Outlook unter Windows (Microsoft 365 Apps oder Office 2016 und
+  neuer), als 32- oder 64-Bit-Version
 - Makros dürfen in Outlook nicht per Richtlinie gesperrt sein. Lässt sich die
   Makroeinstellung im Trust Center nicht ändern, hat die IT sie gesperrt.
 - Excel ist optional und wird erst für den Excel-Export gebraucht.

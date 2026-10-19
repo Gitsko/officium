@@ -61,6 +61,8 @@ mail sending).
     windows are open.
   - Excel: late-bound `CreateObject("Excel.Application")`, only if it
     succeeds; durations as Excel time values so `=SUM()` works.
+- **32- and 64-bit Office:** every `Declare` uses `PtrSafe` and `LongPtr`;
+  no ActiveX controls such as `MSCOMCT2.OCX`, which do not exist in 64-bit.
 - **Start button:** the user adds `OfficiumReport` to the ribbon or the Quick
   Access Toolbar (File > Options > Customize Ribbon > Macros). Signed with a
   certificate from `SelfCert.exe` (ships with Office) so macro security can
