@@ -23,26 +23,39 @@ Sie haben zwei Dateien erhalten: `Officium.bas` und `OfficiumCore.bas`.
 
 **Makro freigeben**
 
-Outlook führt Makros nur aus, wenn sie signiert sind.
+Outlook führt Makros nur aus, wenn sie signiert sind. Dafür legen Sie einmal
+ein eigenes Zertifikat an, signieren damit das Makro und sagen Windows, dass
+es diesem Zertifikat vertrauen soll. Das Zertifikat gilt nur für Ihren
+Windows-Benutzer auf diesem PC; jeder weitere PC braucht ein eigenes.
 
-1. Das Programm `SELFCERT.EXE` aus dem Office-Ordner starten, meist
-   `C:\Program Files\Microsoft Office\root\Office16\`. Als Namen `Officium`
-   eingeben.
-2. Im VBA-Editor (Alt+F11) **Extras** > **Digitale Signatur** > **Wählen**,
-   das Zertifikat `Officium` auswählen und speichern.
-3. In Outlook **Datei** > **Optionen** > **Trust Center** > **Einstellungen
-   für das Trust Center** > **Makroeinstellungen** die Option
-   „Benachrichtigungen für digital signierte Makros, alle anderen Makros sind
-   deaktiviert“ wählen.
-4. Windows-Taste drücken, `certmgr.msc` eingeben und starten. Unter
-   **Eigene Zertifikate** > **Zertifikate** das Zertifikat `Officium` mit
-   gedrückter Strg-Taste nach **Vertrauenswürdige
-   Stammzertifizierungsstellen** > **Zertifikate** ziehen und die Warnung mit
-   **Ja** bestätigen.
-5. Im VBA-Editor die Signatur wie in Schritt 2 noch einmal wählen und
-   speichern.
-6. Outlook ganz schließen und neu starten. Beim ersten Start des Makros
-   **Allen Dokumenten von diesem Herausgeber vertrauen** wählen.
+1. **Zertifikat anlegen.** Windows-Taste drücken und `Digitales Zertifikat`
+   tippen. Erscheint **Digitales Zertifikat für VBA-Projekte**, starten.
+   Sonst im Explorer das Programm `SELFCERT.EXE` öffnen, je nach Office in
+   `C:\Program Files\Microsoft Office\root\Office16\` oder
+   `C:\Program Files (x86)\Microsoft Office\root\Office16\`. Als Namen
+   `Officium` eingeben und mit **OK** bestätigen. Fehlt das Programm, ist
+   die Office-Komponente „Digitale Signatur für VBA-Projekte“ nicht
+   installiert; dann hilft Ihre IT.
+2. **Makro signieren.** In Outlook Alt+F11 drücken, im VBA-Editor
+   **Extras** > **Digitale Signatur** > **Wählen**, `Officium` markieren,
+   zweimal **OK**, dann **Datei** > **Speichern**.
+3. **Makroeinstellung.** In Outlook **Datei** > **Optionen** > **Trust
+   Center** > **Einstellungen für das Trust Center** > **Makroeinstellungen**
+   die Option „Benachrichtigungen für digital signierte Makros, alle anderen
+   Makros sind deaktiviert“ wählen und mit **OK** schließen.
+4. **Zertifikat vertrauen.** Windows-Taste drücken, `certmgr.msc` eingeben
+   und Enter drücken. Links **Eigene Zertifikate** > **Zertifikate** öffnen.
+   Rechts mit Rechtsklick auf `Officium` **Kopieren** wählen. Links
+   **Vertrauenswürdige Stammzertifizierungsstellen** aufklappen und mit
+   Rechtsklick auf deren Ordner **Zertifikate** **Einfügen** wählen. Die
+   Sicherheitswarnung, dass ein Zertifikat installiert wird, mit **Ja**
+   bestätigen. Zur Kontrolle steht `Officium` danach in beiden Ordnern.
+5. **Neu signieren.** Im VBA-Editor die Signatur wie in Schritt 2 noch
+   einmal wählen und speichern. Erst jetzt gilt das Zertifikat als
+   vertrauenswürdig.
+6. **Neu starten.** Outlook ganz schließen und neu starten. Beim ersten
+   Start des Makros fragt Outlook nach; **Allen Dokumenten von diesem
+   Herausgeber vertrauen** wählen. Danach fragt Outlook nicht mehr.
 
 Passiert beim Klick auf den Button nichts, blockiert Outlook das Makro ohne
 Meldung. Dann die Schritte 3 bis 6 prüfen.
