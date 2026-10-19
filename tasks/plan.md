@@ -112,9 +112,21 @@ Tasks live in `tasks/todo.md`.
 | Organisation policy disables VBA in Outlook entirely | High | Checked in Task 1 on the target PC; if so, stop and rethink |
 | Large bodies or many appointments make Excel output slow | Low | Write a 2D array to the sheet in one assignment |
 
-## Open Questions
+## Decisions Taken as Defaults
 
-- Customer assignment: category, subject keyword, or both? (Default: both.)
-- All-day appointments: exclude, or count as a fixed number of hours?
-- Count tentative / free appointments?
-- Should the body text be shortened (first line only) in the clipboard text?
+The questions below were open during planning. The user asked for a finished
+handover without further rounds, so the defaults apply until the first real
+report says otherwise.
+
+- Customer assignment: category or subject keyword, both count. An empty
+  customer reports all appointments of the period.
+- All-day appointments are excluded.
+- Free and tentative appointments count.
+- The clipboard text shows only the first non-blank line of the body; the CSV
+  keeps the full body.
+- An appointment belongs to the period in which it starts.
+- Only the default calendar is read.
+- The summary message appears before Excel opens, so it cannot end up behind
+  the Excel window.
+- The Excel total uses `SUBTOTAL(109, ...)`, so it follows the autofilter.
+- The last customer is remembered via `SaveSetting` (registry, HKCU).
