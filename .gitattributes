@@ -1,4 +1,5 @@
 * text=auto eol=lf
-# The VBA editor imports modules reliably only with CRLF line endings.
-*.bas text eol=crlf
-*.cls text eol=crlf
+# The VBA editor imports modules as Windows-1252 with CRLF line endings.
+# Stored byte for byte, so a download from GitHub keeps both.
+*.bas -text
+*.cls -text

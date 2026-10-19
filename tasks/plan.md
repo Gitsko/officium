@@ -23,6 +23,9 @@ mail sending).
   the user, and the self-test macro is the main safety net.
 - **Source layout:** plain-text VBA modules in `vba/`, imported via the VBA
   editor (File > Import). `.bas` files are stored with CRLF (`.gitattributes`).
+  They are encoded as Windows-1252, because the editor reads them that way
+  and UTF-8 umlauts would arrive garbled, and stored byte for byte
+  (`-text`), so a download from GitHub works as well as a clone.
   No `.frm`/`.frx`: a UserForm needs the binary `.frx`, which cannot be
   produced or reviewed here.
   - `OfficiumCore.bas`: pure logic (period presets, customer match, business
@@ -38,8 +41,10 @@ mail sending).
   - `Items.Sort "[Start]"`, then `IncludeRecurrences = True`, then `Restrict`
     with a closed range (`[Start] < to AND [End] > from`). Any other order
     returns series only once or loops endlessly.
-  - Dates in the `Restrict` string use `Format(d, "ddddd h:nn AMPM")`, which
-    follows the system's short date format as Outlook expects.
+  - Dates in the `Restrict` string use `Format(d, "ddddd hh:nn")`: the
+    system's short date as Outlook expects, with a 24-hour time. The often
+    quoted `h:nn AMPM` is ambiguous on German systems, which have no AM/PM
+    designators.
   - Times come in local time; no timezone handling needed.
 - **Customer match, default until clarified:** an appointment belongs to the
   customer if one of its categories equals the input (case-insensitive) or the
@@ -100,7 +105,7 @@ Tasks live in `tasks/todo.md`.
 |------|--------|------------|
 | Code cannot be run here; slow feedback loop | High | Small tasks, pure core with self-test, precise check steps per task |
 | Recurring series missing or endless loop | High | Task 1 first, with a test series in the calendar |
-| `Restrict` date string misread under German locale | Med | `ddddd h:nn AMPM` format; Task 1 checks a range across month end |
+| `Restrict` date string misread under German locale | Med | `ddddd hh:nn` format; Task 1 checks a range across month end |
 | Macro security blocks unsigned code | Med | SelfCert signing in Task 2, documented in README |
 | Organisation policy disables VBA in Outlook entirely | High | Checked in Task 1 on the target PC; if so, stop and rethink |
 | Large bodies or many appointments make Excel output slow | Low | Write a 2D array to the sheet in one assignment |
