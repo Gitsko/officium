@@ -14,6 +14,7 @@ Public Sub OfficiumSelfTest()
     TestMatchesCustomer
     TestCountsAsWork
     TestGrouping
+    TestReportTitle
 
     Dim summary As String
     summary = passed & " bestanden, " & failed & " fehlgeschlagen"
@@ -96,6 +97,13 @@ Private Sub TestGrouping()
         "Gesamt" & vbTab & "38:30 h (2 Termine)", _
         TotalsText(ReportOf("2026-10", 2250, "2026-11", 60))
     AssertEqual "totals: without grouping", "Gesamt" & vbTab & "0:45 h (1 Termin)", TotalsText(ReportOf("", 45))
+End Sub
+
+Private Sub TestReportTitle()
+    AssertEqual "date text", "05.01.2027", DateText(#1/5/2027 8:15:00 AM#)
+    AssertEqual "time text", "08:05", TimeText(#1/5/2027 8:05:00 AM#)
+    AssertEqual "title: customer", "Acme, 01.10.2026 bis 31.10.2026", ReportTitle(" Acme ", #10/1/2026#, #11/1/2026#)
+    AssertEqual "title: all appointments", "Alle Termine, 01.10.2026 bis 31.12.2026", ReportTitle("", #10/1/2026#, #1/1/2027#)
 End Sub
 
 ' Report with only the group and minutes columns filled, from pairs of values.

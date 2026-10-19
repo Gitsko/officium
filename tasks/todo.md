@@ -123,6 +123,10 @@ the totals per group in a message box.
 
 **Files likely touched:** `vba/Officium.bas`, `README.md`
 
+**Notes:** Code written; checks pending on the user's PC. An appointment
+counts in the period it starts in; the last customer is remembered via
+`SaveSetting`.
+
 **Estimated scope:** M
 
 ## Checkpoint B

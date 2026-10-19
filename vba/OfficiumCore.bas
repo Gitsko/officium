@@ -148,3 +148,19 @@ Public Function TotalsText(ByVal report As Variant) As String
     TotalsText = lines & "Gesamt" & vbTab & FormatMinutes(total) & " h (" & appointments _
         & IIf(appointments = 1, " Termin)", " Termine)")
 End Function
+
+' Date as dd.mm.yyyy and time as hh:mm, independent of the Windows formats.
+Public Function DateText(ByVal d As Date) As String
+    DateText = Format(Day(d), "00") & "." & Format(Month(d), "00") & "." & Year(d)
+End Function
+
+Public Function TimeText(ByVal d As Date) As String
+    TimeText = Format(Hour(d), "00") & ":" & Format(Minute(d), "00")
+End Function
+
+' Heading of a report for [fromDate, untilDate), e.g. "Acme, 01.10.2026 bis 31.10.2026".
+Public Function ReportTitle(ByVal customer As String, ByVal fromDate As Date, ByVal untilDate As Date) As String
+    customer = Trim$(customer)
+    If Len(customer) = 0 Then customer = "Alle Termine"
+    ReportTitle = customer & ", " & DateText(fromDate) & " bis " & DateText(untilDate - 1)
+End Function
